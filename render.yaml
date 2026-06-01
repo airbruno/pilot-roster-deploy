@@ -3,15 +3,19 @@ services:
     name: pilot-roster-api
     runtime: python
     plan: starter
-    buildCommand: pip install -r requirements.txt
-    startCommand: python server.py
+    region: oregon
+    branch: main
+    autoDeploy: true
+    buildCommand: cd backend && pip install -r requirements.txt
+    startCommand: cd backend && python server.py
+    healthCheckPath: /api/health
     envVars:
       - key: DATA_DIR
         value: /var/data
       - key: PILOT_TOKEN
         sync: false
       - key: ALLOWED_ORIGIN
-        sync: false
+        value: https://frontend-seven-mocha-19.vercel.app
     disk:
       name: pilot-roster-data
       mountPath: /var/data
