@@ -1,0 +1,18 @@
+services:
+  - type: web
+    name: pilot-roster-api
+    runtime: python
+    plan: starter
+    buildCommand: pip install -r requirements.txt
+    startCommand: python server.py
+    envVars:
+      - key: DATA_DIR
+        value: /var/data
+      - key: PILOT_TOKEN
+        sync: false
+      - key: ALLOWED_ORIGIN
+        sync: false
+    disk:
+      name: pilot-roster-data
+      mountPath: /var/data
+      sizeGB: 1

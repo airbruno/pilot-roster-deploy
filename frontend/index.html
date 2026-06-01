@@ -1,0 +1,163 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Escala Familiar</title>
+    <link rel="stylesheet" href="/styles.css?v=deploy-1" />
+  </head>
+  <body>
+    <main class="app-shell">
+      <section class="topbar" aria-label="Cabecalho">
+        <div class="brand">
+          <span class="brand-mark" aria-hidden="true">
+            <svg viewBox="0 0 32 32" role="img">
+              <path d="M27.7 6.5 13.9 19l1.7 7.1-2.2 1.2-3.5-5.1-5.8 2.1-1.3-2.2 5.1-4.1-2.2-8.4 2.2-1.1 4.9 6.1 12-10.6c1.1-.9 2.9-.3 3.3.9.2.6.1 1.1-.4 1.6Z" />
+            </svg>
+          </span>
+          <div>
+            <p class="eyebrow">Escala mensal</p>
+            <h1>Portal familiar do piloto</h1>
+          </div>
+        </div>
+        <nav class="view-toggle" aria-label="Navegação">
+          <a class="nav-link" id="familyTab" href="/">Família</a>
+          <a class="nav-link admin-only-nav" id="adminTab" href="/piloto">Piloto</a>
+        </nav>
+      </section>
+
+      <section class="status-strip" aria-label="Resumo">
+        <div>
+          <span class="status-label">Próximo compromisso</span>
+          <strong id="nextDuty">Sem escala carregada</strong>
+        </div>
+        <div>
+          <span class="status-label">Folgas</span>
+          <strong id="offDays">0</strong>
+        </div>
+        <div>
+          <span class="status-label">Reservas</span>
+          <strong id="reserveDays">0</strong>
+        </div>
+        <div>
+          <span class="status-label">Sobreavisos</span>
+          <strong id="standbyDays">0</strong>
+        </div>
+        <div>
+          <span class="status-label">Última atualização</span>
+          <strong id="updatedAt">Agora</strong>
+        </div>
+      </section>
+
+      <section class="workspace">
+        <aside class="panel admin-only" aria-label="Controles do piloto">
+          <div class="panel-section">
+            <h2>Dados do piloto</h2>
+            <label>
+              Nome exibido
+              <input id="pilotName" type="text" placeholder="Ex.: Bruno" />
+            </label>
+            <label>
+              Observação para família
+              <textarea id="familyNote" rows="3" placeholder="Ex.: Horários sujeitos a alteração pela companhia."></textarea>
+            </label>
+          </div>
+
+          <div class="panel-section">
+            <h2>Importar escala</h2>
+            <p class="hint">Envie PDF, CSV, TXT ou cole linhas com: data, inicio, fim, tipo, origem, destino, voo, hotel, observacoes.</p>
+            <input id="fileInput" type="file" accept=".pdf,.csv,.txt,.json,application/pdf" />
+            <div class="import-status" id="importStatus" role="status" aria-live="polite"></div>
+            <textarea id="pasteArea" rows="7" spellcheck="false" placeholder="2026-06-03,08:10,13:40,Voo,GRU,REC,AD4021,Recife Praia,Chegada no início da tarde"></textarea>
+            <div class="button-row">
+              <button id="loadSample" type="button" class="secondary">Dados de exemplo</button>
+              <button id="importText" type="button">Importar texto</button>
+            </div>
+          </div>
+
+          <form class="panel-section" id="manualForm">
+            <h2>Adicionar item</h2>
+            <label>
+              Data
+              <input name="date" type="date" required />
+            </label>
+            <div class="two-col">
+              <label>
+                Início
+                <input name="start" type="time" />
+              </label>
+              <label>
+                Fim
+                <input name="end" type="time" />
+              </label>
+            </div>
+            <label>
+              Tipo
+              <select name="type">
+                <option>Voo</option>
+                <option>Reserva</option>
+                <option>Treinamento</option>
+                <option>Folga</option>
+                <option>Standby</option>
+              </select>
+            </label>
+            <div class="two-col">
+              <label>
+                Origem
+                <input name="from" type="text" placeholder="GRU" />
+              </label>
+              <label>
+                Destino
+                <input name="to" type="text" placeholder="SDU" />
+              </label>
+            </div>
+            <label>
+              Voo/Detalhe
+              <input name="flight" type="text" placeholder="AD1234" />
+            </label>
+            <label>
+              Hotel
+              <input name="hotel" type="text" />
+            </label>
+            <label>
+              Observações
+              <textarea name="notes" rows="2"></textarea>
+            </label>
+            <button type="submit">Adicionar na escala</button>
+          </form>
+
+          <div class="panel-section">
+            <h2>Compartilhar</h2>
+            <p class="hint">Publica a escala atual para o portal da família.</p>
+            <button id="shareButton" type="button">Publicar escala</button>
+            <textarea id="shareLink" rows="4" readonly placeholder="Status da publicação"></textarea>
+          </div>
+        </aside>
+
+        <section class="schedule-area" aria-label="Escala">
+          <div class="schedule-toolbar">
+            <div>
+              <p class="eyebrow" id="portalLabel">Área do piloto</p>
+              <h2 id="monthTitle">Junho 2026</h2>
+            </div>
+            <div class="toolbar-actions">
+              <button class="icon-button" id="prevMonth" type="button" aria-label="Mês anterior" title="Mês anterior">
+                <svg viewBox="0 0 24 24"><path d="m15 18-6-6 6-6" /></svg>
+              </button>
+              <div class="month-label" id="monthLabel" aria-live="polite">junho de 2026</div>
+              <button class="icon-button" id="nextMonth" type="button" aria-label="Próximo mês" title="Próximo mês">
+                <svg viewBox="0 0 24 24"><path d="m9 18 6-6-6-6" /></svg>
+              </button>
+            </div>
+          </div>
+
+          <div class="family-note family-only" id="familyNoteDisplay"></div>
+
+          <div class="calendar" id="calendar" aria-label="Calendario mensal"></div>
+        </section>
+      </section>
+    </main>
+    <script src="/config.js?v=deploy-1"></script>
+    <script src="/app.js?v=deploy-1"></script>
+  </body>
+</html>
