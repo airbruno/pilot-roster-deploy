@@ -623,13 +623,15 @@ function renderCalendar() {
       : inactive
         ? `<span class="badge flight">Voo</span>`
         : "";
-    const reportDuty = dayDuties.find((duty) => duty.reportTime);
+    const reportDuty = dayDuties.find((duty) => typeToClass(duty.type) === "flight" && duty.reportTime);
     const report = reportDuty ? `<div class="mini-report">Apresentação: ${escapeHtml(reportDuty.reportTime)}</div>` : "";
+    const dutyEndDuty = [...dayDuties].reverse().find((duty) => typeToClass(duty.type) === "flight" && (duty.dutyEnd || duty.end));
+    const dutyEnd = dutyEndDuty ? dutyEndDuty.dutyEnd || dutyEndDuty.end : "";
+    const dutyEndLine = dutyEnd ? `<div class="mini-report">Fim da jornada: ${escapeHtml(dutyEnd)}</div>` : "";
     const duties = dayDuties.length ? dayDuties.map((duty) => {
       const route = dutyPlaceLabel(duty);
       const time = [duty.start, duty.end].filter(Boolean).join("-");
-      const dutyEnd = duty.dutyEnd && duty.dutyEnd !== duty.end ? ` ${duty.dutyEnd}` : "";
-      return `<div class="mini-duty ${typeToClass(duty.type)}">${escapeHtml(time)} ${escapeHtml(route)}${escapeHtml(dutyEnd)}</div>`;
+      return `<div class="mini-duty ${typeToClass(duty.type)}">${escapeHtml(time)} ${escapeHtml(route)}</div>`;
     }).join("") : inactive
       ? `<div class="mini-duty flight inactive-duty">${bedIcon()}<span>Inativo</span></div>`
       : `<div class="no-data">Sem dados</div>`;
@@ -642,6 +644,7 @@ function renderCalendar() {
         </div>
         ${report}
         ${duties}
+        ${dutyEndLine}
       </article>
     `);
   });
