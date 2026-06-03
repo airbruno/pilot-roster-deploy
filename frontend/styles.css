@@ -502,6 +502,11 @@ body.family-mode .admin-only-nav {
   display: none;
 }
 
+body.family-mode .topbar,
+body.family-mode .status-strip {
+  display: none;
+}
+
 body.family-mode .view-toggle {
   grid-template-columns: 1fr;
 }
@@ -512,10 +517,13 @@ body.family-mode .family-only {
 
 body.family-mode .workspace {
   grid-template-columns: 1fr;
+  border-top: 1px solid rgba(49, 66, 86, 0.92);
+  border-radius: 8px;
+  min-height: calc(100vh - 48px);
 }
 
 body.family-mode .schedule-area {
-  border-radius: 0 0 8px 8px;
+  border-radius: 8px;
 }
 
 .empty-state {
