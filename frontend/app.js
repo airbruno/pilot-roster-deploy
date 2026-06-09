@@ -108,6 +108,63 @@ function dutyPlaceLabel(duty, separator = "-") {
   return duty.flight || duty.from || duty.to || duty.type;
 }
 
+function flightRadarUrl(flight) {
+  const slug = normalizeText(flight).replace(/[^a-z0-9]/g, "");
+  return slug ? `https://www.flightradar24.com/data/flights/${slug}` : "";
+}
+
+function flightLink(duty) {
+  if (typeToClass(duty.type) !== "flight" || !duty.flight) return "";
+  const url = flightRadarUrl(duty.flight);
+  if (!url) return "";
+  const label = escapeHtml(duty.flight.toUpperCase());
+  return `<a class="flight-link" href="${url}" target="_blank" rel="noopener noreferrer" title="Abrir ${label} no FlightRadar24">${label}</a>`;
+}
+
+function flightRouteLabel(duty) {
+  if (duty.from && duty.to) return `${escapeHtml(duty.from)} <span class="route-arrow">&rarr;</span> ${escapeHtml(duty.to)}`;
+  return escapeHtml(dutyPlaceLabel(duty));
+}
+
+function badgeLabel(duty) {
+  if (typeToClass(duty.type) === "standby" && /\bHSBE(?:-\d+)?\b/i.test(`${duty.flight || ""} ${duty.notes || ""}`)) {
+    return "Sobreaviso (extra)";
+  }
+  return duty.type;
+}
+
+function renderActivityBlock(duty, dutyClass, time) {
+  const base = duty.from || duty.to || "";
+  const timeLine = time ? `<div class="activity-duty-time">${escapeHtml(time)}</div>` : "";
+  const baseLine = base ? `<div class="activity-duty-base">${escapeHtml(base)}</div>` : "";
+  return `
+    <div class="mini-duty ${dutyClass} activity-duty">
+      ${baseLine}
+      ${timeLine}
+    </div>
+  `;
+}
+
+function renderDutyLine(duty) {
+  const dutyClass = typeToClass(duty.type);
+  const time = [duty.start, duty.end].filter(Boolean).join("-");
+  if (dutyClass === "flight") {
+    const flightNumber = flightLink(duty) || `<span class="flight-code">${escapeHtml(duty.flight || "Voo")}</span>`;
+    const timeLine = time ? `<div class="flight-duty-time">${escapeHtml(time)}</div>` : "";
+    return `
+      <div class="mini-duty flight flight-duty">
+        <div class="flight-duty-number">${flightNumber}</div>
+        <div class="flight-duty-route">${flightRouteLabel(duty)}</div>
+        ${timeLine}
+      </div>
+    `;
+  }
+  if (["reserve", "standby", "off", "training"].includes(dutyClass)) {
+    return renderActivityBlock(duty, dutyClass, time);
+  }
+  return `<div class="mini-duty ${dutyClass}">${escapeHtml(time)} ${escapeHtml(dutyPlaceLabel(duty))}</div>`;
+}
+
 function apiUrl(path) {
   return `${API_URL}${path}`;
 }
@@ -619,7 +676,7 @@ function renderCalendar() {
     const primary = dayDuties[0];
     const inactive = !dayDuties.length && isBetweenFlightDays(key, monthDuties);
     const badge = primary
-      ? `<span class="badge ${typeToClass(primary.type)}">${escapeHtml(primary.type)}</span>`
+      ? `<span class="badge ${typeToClass(primary.type)}">${escapeHtml(badgeLabel(primary))}</span>`
       : inactive
         ? `<span class="badge flight">Voo</span>`
         : "";
@@ -628,11 +685,7 @@ function renderCalendar() {
     const dutyEndDuty = [...dayDuties].reverse().find((duty) => typeToClass(duty.type) === "flight" && (duty.dutyEnd || duty.end));
     const dutyEnd = dutyEndDuty ? dutyEndDuty.dutyEnd || dutyEndDuty.end : "";
     const dutyEndLine = dutyEnd ? `<div class="mini-report">Fim da jornada: ${escapeHtml(dutyEnd)}</div>` : "";
-    const duties = dayDuties.length ? dayDuties.map((duty) => {
-      const route = dutyPlaceLabel(duty);
-      const time = [duty.start, duty.end].filter(Boolean).join("-");
-      return `<div class="mini-duty ${typeToClass(duty.type)}">${escapeHtml(time)} ${escapeHtml(route)}</div>`;
-    }).join("") : inactive
+    const duties = dayDuties.length ? dayDuties.map(renderDutyLine).join("") : inactive
       ? `<div class="mini-duty flight inactive-duty">${bedIcon()}<span>Inativo</span></div>`
       : `<div class="no-data">Sem dados</div>`;
     const weekdayName = new Intl.DateTimeFormat("pt-BR", { weekday: "long" }).format(date);

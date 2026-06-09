@@ -435,10 +435,88 @@ h2 {
   white-space: nowrap;
 }
 
+.flight-duty {
+  display: grid;
+  gap: 3px;
+  overflow: visible;
+  padding-bottom: 8px;
+  white-space: normal;
+}
+
+.flight-duty + .flight-duty {
+  border-top: 1px solid rgba(149, 164, 184, 0.16);
+  padding-top: 8px;
+}
+
+.flight-duty-number,
+.flight-code {
+  color: #a8c2ff;
+  font-size: 0.88rem;
+  font-weight: 900;
+  line-height: 1.2;
+}
+
+.flight-duty-route {
+  color: var(--ink);
+  font-size: 1rem;
+  font-weight: 850;
+  line-height: 1.2;
+}
+
+.route-arrow {
+  color: var(--muted);
+  padding: 0 2px;
+}
+
+.flight-duty-time {
+  color: var(--muted);
+  font-size: 0.82rem;
+  font-weight: 800;
+  line-height: 1.2;
+}
+
+.flight-link {
+  color: #a8c2ff;
+  font-weight: 800;
+  text-decoration: none;
+}
+
+.flight-link:hover {
+  color: var(--ink);
+  text-decoration: underline;
+}
+
+.activity-duty {
+  display: grid;
+  gap: 3px;
+  overflow: visible;
+  padding-bottom: 6px;
+  white-space: normal;
+}
+
+.activity-duty-base {
+  color: var(--ink);
+  font-size: 1rem;
+  font-weight: 850;
+  line-height: 1.2;
+}
+
+.activity-duty-time {
+  color: var(--muted);
+  font-size: 0.82rem;
+  font-weight: 800;
+  line-height: 1.2;
+}
+
 .inactive-duty {
   align-items: center;
+  color: var(--muted);
   display: inline-flex;
   gap: 8px;
+  font-size: 0.92rem;
+  font-weight: 850;
+  overflow: visible;
+  white-space: normal;
 }
 
 .bed-icon {
