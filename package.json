@@ -1,0 +1,11 @@
+{
+  "name": "pilot-roster-deploy",
+  "private": true,
+  "scripts": {
+    "sync:frontend": "node scripts/sync-frontend.mjs",
+    "check:static": "node scripts/check-static.mjs",
+    "check:backend": "node scripts/check-backend.mjs",
+    "check:visual": "node scripts/visual-check.mjs",
+    "predeploy": "npm run sync:frontend && npm run check:static && npm run check:backend && npm run check:visual"
+  }
+}

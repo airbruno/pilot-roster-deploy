@@ -12,21 +12,15 @@ const state = {
 const els = {
   adminTab: document.querySelector("#adminTab"),
   familyTab: document.querySelector("#familyTab"),
-  nextDuty: document.querySelector("#nextDuty"),
   offDays: document.querySelector("#offDays"),
   reserveDays: document.querySelector("#reserveDays"),
   standbyDays: document.querySelector("#standbyDays"),
+  inactiveDays: document.querySelector("#inactiveDays"),
   updatedAt: document.querySelector("#updatedAt"),
   pilotName: document.querySelector("#pilotName"),
   familyNote: document.querySelector("#familyNote"),
   fileInput: document.querySelector("#fileInput"),
   importStatus: document.querySelector("#importStatus"),
-  pasteArea: document.querySelector("#pasteArea"),
-  loadSample: document.querySelector("#loadSample"),
-  importText: document.querySelector("#importText"),
-  manualForm: document.querySelector("#manualForm"),
-  shareButton: document.querySelector("#shareButton"),
-  shareLink: document.querySelector("#shareLink"),
   portalLabel: document.querySelector("#portalLabel"),
   monthTitle: document.querySelector("#monthTitle"),
   monthLabel: document.querySelector("#monthLabel"),
@@ -34,11 +28,19 @@ const els = {
   nextMonth: document.querySelector("#nextMonth"),
   calendar: document.querySelector("#calendar"),
   familyNoteDisplay: document.querySelector("#familyNoteDisplay"),
+  scheduleFooter: document.querySelector("#scheduleFooter"),
+  todayButton: document.querySelector("#todayButton"),
+  pilotLogin: document.querySelector("#pilotLogin"),
+  pilotLoginForm: document.querySelector("#pilotLoginForm"),
+  pilotToken: document.querySelector("#pilotToken"),
+  loginError: document.querySelector("#loginError"),
+  logoutButton: document.querySelector("#logoutButton"),
 };
 
 const STORAGE_KEY = "pilot-family-schedule-v1";
-const API_URL = (window.APP_CONFIG && window.APP_CONFIG.API_URL ? window.APP_CONFIG.API_URL : "").replace(/\/$/, "");
 const PILOT_TOKEN_KEY = "pilot-roster-token";
+const LOCAL_PILOT_TOKEN = "test-token";
+const LOCAL_API_URL = "http://localhost:4174";
 const monthNames = {
   jan: 1,
   janeiro: 1,
@@ -163,19 +165,6 @@ function renderDutyLine(duty) {
     return renderActivityBlock(duty, dutyClass, time);
   }
   return `<div class="mini-duty ${dutyClass}">${escapeHtml(time)} ${escapeHtml(dutyPlaceLabel(duty))}</div>`;
-}
-
-function apiUrl(path) {
-  return `${API_URL}${path}`;
-}
-
-function getPilotToken() {
-  let token = localStorage.getItem(PILOT_TOKEN_KEY) || "";
-  if (!token) {
-    token = prompt("Senha/token do piloto") || "";
-    if (token) localStorage.setItem(PILOT_TOKEN_KEY, token);
-  }
-  return token;
 }
 
 function inferReportTime(input) {
@@ -551,47 +540,41 @@ function readShareFromUrl() {
   }
 }
 
-async function loadPublishedRoster() {
-  if (!API_URL) {
-    loadLocal();
-    return;
-  }
-  const response = await fetch(apiUrl("/api/roster/public"));
-  if (response.status === 404) return;
-  const payload = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error(payload.error || "Nao foi possivel carregar a escala publicada.");
-  state.meta = { ...state.meta, ...payload.meta };
-  state.duties = Array.isArray(payload.duties) ? payload.duties.map(normalizeDuty).filter(Boolean) : [];
-  sortDuties();
+function isPilotPath() {
+  return window.location.pathname.replace(/\/+$/, "") === "/piloto";
 }
 
-async function publishRoster() {
-  if (!API_URL) {
-    throw new Error("Configure API_URL em config.js antes de publicar em produção.");
+function hasPilotAccess() {
+  return localStorage.getItem(PILOT_TOKEN_KEY) === LOCAL_PILOT_TOKEN;
+}
+
+function setPilotLocked(locked) {
+  document.body.classList.toggle("pilot-locked", locked);
+  if (els.pilotLogin) els.pilotLogin.hidden = !locked;
+  if (locked) {
+    if (els.loginError) els.loginError.classList.remove("visible");
+    requestAnimationFrame(() => els.pilotToken?.focus());
   }
-  const token = getPilotToken();
-  if (!token) throw new Error("Token do piloto nao informado.");
-  const response = await fetch(apiUrl("/api/roster"), {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "X-Pilot-Token": token,
-    },
-    body: JSON.stringify({
-      meta: {
-        pilotName: state.meta.pilotName,
-        familyNote: state.meta.familyNote,
-        updatedAt: new Date().toISOString(),
-      },
-      duties: state.duties,
-    }),
-  });
-  const payload = await response.json().catch(() => ({}));
-  if (!response.ok) {
-    if (response.status === 401 || response.status === 403) localStorage.removeItem(PILOT_TOKEN_KEY);
-    throw new Error(payload.error || "Nao foi possivel publicar a escala.");
+}
+
+function unlockPilot(token) {
+  if (token.trim() !== LOCAL_PILOT_TOKEN) {
+    if (els.loginError) {
+      els.loginError.textContent = "Token invalido.";
+      els.loginError.classList.add("visible");
+    }
+    return false;
   }
-  return payload;
+  localStorage.setItem(PILOT_TOKEN_KEY, LOCAL_PILOT_TOKEN);
+  setPilotLocked(false);
+  setMode("admin");
+  return true;
+}
+
+function logoutPilot() {
+  localStorage.removeItem(PILOT_TOKEN_KEY);
+  if (els.pilotToken) els.pilotToken.value = "";
+  setPilotLocked(true);
 }
 
 function setMode(mode) {
@@ -612,21 +595,42 @@ function syncMetaFromInputs() {
 }
 
 function renderSummary() {
-  const nowKey = todayKey();
-  const upcoming = state.duties.find((duty) => duty.date >= nowKey && typeToClass(duty.type) !== "off");
-  els.nextDuty.textContent = upcoming
-    ? `${formatDate(upcoming.date)} ${upcoming.start || ""} ${dutyPlaceLabel(upcoming)}`.trim()
-    : "Sem compromisso futuro";
-
   els.offDays.textContent = String(state.duties.filter((duty) => typeToClass(duty.type) === "off").length);
   els.reserveDays.textContent = String(state.duties.filter((duty) => typeToClass(duty.type) === "reserve").length);
   els.standbyDays.textContent = String(state.duties.filter((duty) => typeToClass(duty.type) === "standby").length);
+  els.inactiveDays.textContent = String(inactiveDatesForMonth().length);
   els.updatedAt.textContent = new Intl.DateTimeFormat("pt-BR", {
     day: "2-digit",
     month: "2-digit",
     hour: "2-digit",
     minute: "2-digit",
   }).format(new Date(state.meta.updatedAt || Date.now()));
+}
+
+function formatUpdatedAt() {
+  if (!state.duties.length) return state.mode === "family" ? "Aguardando publicação" : "Nenhuma escala importada";
+  return `Atualizado em ${new Intl.DateTimeFormat("pt-BR", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(new Date(state.meta.updatedAt || Date.now()))}`;
+}
+
+function emptyStateMarkup() {
+  const message = state.mode === "family"
+    ? "Nenhuma escala publicada ainda."
+    : "Importe um PDF ou carregue dados para visualizar a escala.";
+  const detail = state.mode === "family"
+    ? "Assim que o piloto publicar uma escala, os dias aparecem aqui."
+    : "Use o painel do piloto para importar uma escala mensal.";
+  return `
+    <div class="empty-state">
+      <strong>${escapeHtml(message)}</strong>
+      <span>${escapeHtml(detail)}</span>
+    </div>
+  `;
 }
 
 function dutiesForMonth() {
@@ -650,6 +654,13 @@ function isBetweenFlightDays(key, monthDuties) {
   return Boolean(before && after && typeToClass(before.type) === "flight" && typeToClass(after.type) === "flight");
 }
 
+function inactiveDatesForMonth() {
+  const monthDuties = dutiesForMonth();
+  return datesForVisibleMonth()
+    .filter(({ key }) => !monthDuties.some((duty) => duty.date === key) && isBetweenFlightDays(key, monthDuties))
+    .map(({ key }) => key);
+}
+
 function bedIcon() {
   return `
     <svg class="bed-icon" viewBox="0 0 24 24" aria-hidden="true">
@@ -666,6 +677,11 @@ function renderCalendar() {
   els.monthTitle.textContent = formatMonth(state.visibleMonth);
   els.monthLabel.textContent = formatMonth(state.visibleMonth);
   els.calendar.innerHTML = "";
+
+  if (!state.duties.length) {
+    els.calendar.innerHTML = emptyStateMarkup();
+    return;
+  }
 
   const currentToday = todayKey();
   const monthDuties = dutiesForMonth();
@@ -690,7 +706,7 @@ function renderCalendar() {
       : `<div class="no-data">Sem dados</div>`;
     const weekdayName = new Intl.DateTimeFormat("pt-BR", { weekday: "long" }).format(date);
     els.calendar.insertAdjacentHTML("beforeend", `
-      <article class="day ${key === currentToday ? "today" : ""}">
+      <article class="day ${key === currentToday ? "today" : ""}" data-date="${key}">
         <div class="day-number">
           <span class="day-title"><span class="day-date">${date.getDate()}</span><span class="day-weekday">${escapeHtml(weekdayName)}</span></span>
           ${badge}
@@ -707,6 +723,7 @@ function render() {
   els.pilotName.value = state.meta.pilotName || "";
   els.familyNote.value = state.meta.familyNote || "";
   els.familyNoteDisplay.textContent = state.meta.familyNote || "Sem observacoes adicionais.";
+  els.scheduleFooter.textContent = formatUpdatedAt();
   renderSummary();
   renderCalendar();
 }
@@ -750,8 +767,18 @@ function shiftMonth(amount) {
   render();
 }
 
+function goToToday() {
+  const today = new Date();
+  state.visibleMonth = new Date(today.getFullYear(), today.getMonth(), 1);
+  render();
+  requestAnimationFrame(() => {
+    const todayCard = document.querySelector(`.day[data-date="${todayKey()}"]`);
+    if (todayCard) todayCard.scrollIntoView({ behavior: "smooth", block: "center" });
+  });
+}
+
 async function extractPdfText(file) {
-  const endpoint = apiUrl(`/api/extract-pdf?filename=${encodeURIComponent(file.name || "escala.pdf")}`);
+  const endpoint = `${LOCAL_API_URL}/api/extract-pdf?filename=${encodeURIComponent(file.name || "escala.pdf")}`;
   try {
     const response = await fetch(endpoint, {
       method: "POST",
@@ -793,24 +820,13 @@ function extractPdfTextWithXHR(endpoint, file) {
 }
 
 function bindEvents() {
-  els.adminTab.addEventListener("click", () => setMode("admin"));
-  els.familyTab.addEventListener("click", () => setMode("family"));
+  els.pilotLoginForm?.addEventListener("submit", (event) => {
+    event.preventDefault();
+    unlockPilot(els.pilotToken?.value || "");
+  });
+  els.logoutButton?.addEventListener("click", logoutPilot);
   els.pilotName.addEventListener("change", syncMetaFromInputs);
   els.familyNote.addEventListener("change", syncMetaFromInputs);
-  els.loadSample.addEventListener("click", () => {
-    els.pasteArea.value = [
-      "data,inicio,fim,tipo,origem,destino,voo,hotel,observacoes",
-      "2026-06-03,08:10,13:40,Voo,GRU,REC,AD4021,Recife Praia,Chegada no inicio da tarde",
-      "2026-06-04,09:25,12:05,Voo,REC,SSA,AD3188,,Volta curta",
-      "2026-06-07,,,Folga,,,,,Aniversario em familia",
-      "2026-06-12,06:00,18:00,Reserva,CGH,,,,Base Sao Paulo",
-      "2026-06-18,14:30,22:10,Voo,GRU,POA,AD2770,Porto Alegre Centro,Pernoite",
-      "2026-06-19,10:20,12:00,Voo,POA,GRU,AD2771,,Retorno",
-      "2026-06-25,08:00,17:00,Treinamento,GRU,,,,Simulador anual",
-    ].join("\n");
-    importDuties(els.pasteArea.value);
-  });
-  els.importText.addEventListener("click", () => importDuties(els.pasteArea.value));
   els.fileInput.addEventListener("change", async (event) => {
     const file = event.target.files[0];
     if (!file) return;
@@ -820,7 +836,6 @@ function bindEvents() {
       if (isPdf) {
         setImportStatus("Extraindo texto do PDF...", "busy");
         const payload = await extractPdfText(file);
-        els.pasteArea.value = payload.text.slice(0, 6000);
         importDuties(payload.text, `PDF (${payload.pages} pagina(s))`);
       } else {
         importDuties(await file.text(), file.name);
@@ -831,46 +846,32 @@ function bindEvents() {
       event.target.value = "";
     }
   });
-  els.manualForm.addEventListener("submit", (event) => {
-    event.preventDefault();
-    const formData = new FormData(event.currentTarget);
-    const duty = normalizeDuty(Object.fromEntries(formData.entries()));
-    if (duty) addDuty(duty);
-    event.currentTarget.reset();
-  });
-  els.shareButton.addEventListener("click", async () => {
-    try {
-      syncMetaFromInputs();
-      const payload = await publishRoster();
-      els.shareLink.value = `Escala publicada. Portal da família: ${window.location.origin}/`;
-      setImportStatus(`${payload.count || state.duties.length} item(ns) publicado(s).`, "ok");
-    } catch (error) {
-      els.shareLink.value = error.message || "Falha ao publicar.";
-      setImportStatus(els.shareLink.value, "error");
-    }
-  });
   els.prevMonth.addEventListener("click", () => shiftMonth(-1));
   els.nextMonth.addEventListener("click", () => shiftMonth(1));
+  els.todayButton.addEventListener("click", goToToday);
 }
 
-async function init() {
-  const isPilotRoute = window.location.pathname.replace(/\/+$/, "") === "/piloto";
+function init() {
+  const isPilotRoute = isPilotPath();
   const shared = readShareFromUrl();
-  if (!shared && isPilotRoute) {
-    loadLocal();
-  } else if (!shared) {
-    try {
-      await loadPublishedRoster();
-    } catch (error) {
-      console.warn(error);
-    }
-  }
+  if (!shared) loadLocal();
   if (state.duties[0]) {
     const [year, month] = state.duties[0].date.split("-").map(Number);
     state.visibleMonth = new Date(year, month - 1, 1);
   }
   bindEvents();
-  setMode(isPilotRoute && !shared ? "admin" : "family");
+  if (isPilotRoute && !shared) {
+    if (!hasPilotAccess()) {
+      setMode("admin");
+      setPilotLocked(true);
+      return;
+    }
+    setPilotLocked(false);
+    setMode("admin");
+    return;
+  }
+  setPilotLocked(false);
+  setMode("family");
 }
 
 init();

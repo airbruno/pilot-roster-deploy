@@ -83,6 +83,26 @@ https://SEU-APP.vercel.app/
 
 6. Confirme que a visão da família carrega a escala publicada.
 
+## Automacoes locais
+
+Antes de publicar, rode os comandos dentro desta pasta:
+
+```bash
+npm run sync:frontend
+npm run check:static
+npm run check:backend
+npm run check:visual
+```
+
+Ou rode tudo em sequência:
+
+```bash
+npm run predeploy
+```
+
+O `sync:frontend` copia a versao local de `outputs/pilot-schedule-app` para `frontend/`.
+O `check:visual` gera uma captura mobile em `artifacts/family-mobile.png`.
+
 ## Observações
 
 - O banco é SQLite em disco persistente do Render.
