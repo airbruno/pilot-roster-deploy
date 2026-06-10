@@ -40,6 +40,7 @@ const els = {
 
 const STORAGE_KEY = "pilot-family-schedule-v1";
 const PILOT_TOKEN_KEY = "pilot-roster-token";
+const PILOT_SESSION_KEY = "pilot-roster-session";
 const LOCAL_PILOT_TOKEN = "test-token";
 const LOCAL_API_URL = "http://localhost:4174";
 const CONFIGURED_API_URL = window.APP_CONFIG?.API_URL ? String(window.APP_CONFIG.API_URL).replace(/\/+$/, "") : "";
@@ -546,11 +547,15 @@ function isPilotPath() {
   return window.location.pathname.replace(/\/+$/, "") === "/piloto";
 }
 
+function isLocalHost() {
+  return window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1";
+}
+
 function hasPilotAccess() {
   const saved = localStorage.getItem(PILOT_TOKEN_KEY) || "";
-  if (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1") {
-    return saved === LOCAL_PILOT_TOKEN;
-  }
+  const activeSession = sessionStorage.getItem(PILOT_SESSION_KEY) === "active";
+  if (!activeSession) return false;
+  if (isLocalHost()) return saved === LOCAL_PILOT_TOKEN;
   return Boolean(saved);
 }
 
@@ -565,7 +570,7 @@ function setPilotLocked(locked) {
 
 function unlockPilot(token) {
   const normalized = token.trim();
-  const isLocal = window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1";
+  const isLocal = isLocalHost();
   if (!normalized || (isLocal && normalized !== LOCAL_PILOT_TOKEN)) {
     if (els.loginError) {
       els.loginError.textContent = isLocal ? "Token invalido." : "Informe o token do piloto.";
@@ -574,6 +579,7 @@ function unlockPilot(token) {
     return false;
   }
   localStorage.setItem(PILOT_TOKEN_KEY, normalized);
+  sessionStorage.setItem(PILOT_SESSION_KEY, "active");
   setPilotLocked(false);
   setMode("admin");
   return true;
@@ -581,6 +587,7 @@ function unlockPilot(token) {
 
 function logoutPilot() {
   localStorage.removeItem(PILOT_TOKEN_KEY);
+  sessionStorage.removeItem(PILOT_SESSION_KEY);
   if (els.pilotToken) els.pilotToken.value = "";
   setPilotLocked(true);
 }
@@ -786,10 +793,19 @@ function goToToday() {
 }
 
 function apiBaseUrl() {
-  if (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1") {
-    return LOCAL_API_URL;
+  if (isLocalHost()) {
+    return window.location.origin;
   }
   return CONFIGURED_API_URL || LOCAL_API_URL;
+}
+
+function registerServiceWorker() {
+  if (!("serviceWorker" in navigator)) return;
+  window.addEventListener("load", () => {
+    navigator.serviceWorker.register("/service-worker.js").catch(() => {
+      // Ignore registration failures on unsupported local environments.
+    });
+  });
 }
 
 async function loadPublishedRoster() {
@@ -925,6 +941,7 @@ function bindEvents() {
 }
 
 function init() {
+  registerServiceWorker();
   const isPilotRoute = isPilotPath();
   const shared = readShareFromUrl();
   if (!shared) loadLocal();

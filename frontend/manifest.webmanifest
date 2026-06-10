@@ -1,0 +1,37 @@
+{
+  "name": "Escala Familiar",
+  "short_name": "Escala",
+  "description": "Escala mensal do piloto para consulta da família e publicação pelo portal do piloto.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#070b12",
+  "theme_color": "#0f1724",
+  "orientation": "portrait",
+  "icons": [
+    {
+      "src": "/icons/app-icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/app-icon-maskable.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Portal da família",
+      "short_name": "Família",
+      "url": "/"
+    },
+    {
+      "name": "Portal do piloto",
+      "short_name": "Piloto",
+      "url": "/piloto/"
+    }
+  ]
+}

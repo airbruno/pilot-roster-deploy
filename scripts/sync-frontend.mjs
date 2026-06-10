@@ -10,8 +10,12 @@ const targetRoot = path.join(repoRoot, "frontend");
 const files = [
   ["app.js", "app.js"],
   ["styles.css", "styles.css"],
+  ["manifest.webmanifest", "manifest.webmanifest"],
+  ["service-worker.js", "service-worker.js"],
   ["index.html", "index.html"],
   ["piloto/index.html", "piloto/index.html"],
+  ["icons/app-icon.svg", "icons/app-icon.svg"],
+  ["icons/app-icon-maskable.svg", "icons/app-icon-maskable.svg"],
 ];
 
 async function exists(filePath) {
