@@ -21,6 +21,7 @@ const els = {
   familyNote: document.querySelector("#familyNote"),
   fileInput: document.querySelector("#fileInput"),
   importStatus: document.querySelector("#importStatus"),
+  publishButton: document.querySelector("#publishButton"),
   portalLabel: document.querySelector("#portalLabel"),
   monthTitle: document.querySelector("#monthTitle"),
   monthLabel: document.querySelector("#monthLabel"),
@@ -546,7 +547,11 @@ function isPilotPath() {
 }
 
 function hasPilotAccess() {
-  return localStorage.getItem(PILOT_TOKEN_KEY) === LOCAL_PILOT_TOKEN;
+  const saved = localStorage.getItem(PILOT_TOKEN_KEY) || "";
+  if (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1") {
+    return saved === LOCAL_PILOT_TOKEN;
+  }
+  return Boolean(saved);
 }
 
 function setPilotLocked(locked) {
@@ -559,14 +564,16 @@ function setPilotLocked(locked) {
 }
 
 function unlockPilot(token) {
-  if (token.trim() !== LOCAL_PILOT_TOKEN) {
+  const normalized = token.trim();
+  const isLocal = window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1";
+  if (!normalized || (isLocal && normalized !== LOCAL_PILOT_TOKEN)) {
     if (els.loginError) {
-      els.loginError.textContent = "Token invalido.";
+      els.loginError.textContent = isLocal ? "Token invalido." : "Informe o token do piloto.";
       els.loginError.classList.add("visible");
     }
     return false;
   }
-  localStorage.setItem(PILOT_TOKEN_KEY, LOCAL_PILOT_TOKEN);
+  localStorage.setItem(PILOT_TOKEN_KEY, normalized);
   setPilotLocked(false);
   setMode("admin");
   return true;
@@ -785,6 +792,55 @@ function apiBaseUrl() {
   return CONFIGURED_API_URL || LOCAL_API_URL;
 }
 
+async function loadPublishedRoster() {
+  if (!CONFIGURED_API_URL && !(window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1")) {
+    return false;
+  }
+  try {
+    const response = await fetch(`${apiBaseUrl()}/api/roster/public`);
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) return false;
+    state.meta = { ...state.meta, ...(payload.meta || {}) };
+    state.duties = Array.isArray(payload.duties) ? payload.duties.map(normalizeDuty).filter(Boolean) : [];
+    sortDuties();
+    if (state.duties[0]) {
+      const [year, month] = state.duties[0].date.split("-").map(Number);
+      state.visibleMonth = new Date(year, month - 1, 1);
+    }
+    render();
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function publishRoster() {
+  const token = localStorage.getItem(PILOT_TOKEN_KEY) || "";
+  if (!token) {
+    throw new Error("Token do piloto nao informado.");
+  }
+  syncMetaFromInputs();
+  const response = await fetch(`${apiBaseUrl()}/api/roster`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "X-Pilot-Token": token,
+    },
+    body: JSON.stringify({
+      meta: state.meta,
+      duties: state.duties,
+    }),
+  });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new Error(payload.error || "Nao foi possivel publicar a escala.");
+  }
+  state.meta.updatedAt = payload.updatedAt || new Date().toISOString();
+  saveLocal();
+  render();
+  return payload;
+}
+
 async function extractPdfText(file) {
   const endpoint = `${apiBaseUrl()}/api/extract-pdf?filename=${encodeURIComponent(file.name || "escala.pdf")}`;
   try {
@@ -854,6 +910,15 @@ function bindEvents() {
       event.target.value = "";
     }
   });
+  els.publishButton?.addEventListener("click", async () => {
+    try {
+      setImportStatus("Publicando escala...", "busy");
+      const payload = await publishRoster();
+      setImportStatus(`${payload.count || state.duties.length} item(ns) publicado(s).`, "ok");
+    } catch (error) {
+      setImportStatus(error.message || "Falha ao publicar escala.", "error");
+    }
+  });
   els.prevMonth.addEventListener("click", () => shiftMonth(-1));
   els.nextMonth.addEventListener("click", () => shiftMonth(1));
   els.todayButton.addEventListener("click", goToToday);
@@ -880,6 +945,7 @@ function init() {
   }
   setPilotLocked(false);
   setMode("family");
+  loadPublishedRoster();
 }
 
 init();
