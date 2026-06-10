@@ -41,6 +41,7 @@ const STORAGE_KEY = "pilot-family-schedule-v1";
 const PILOT_TOKEN_KEY = "pilot-roster-token";
 const LOCAL_PILOT_TOKEN = "test-token";
 const LOCAL_API_URL = "http://localhost:4174";
+const CONFIGURED_API_URL = window.APP_CONFIG?.API_URL ? String(window.APP_CONFIG.API_URL).replace(/\/+$/, "") : "";
 const monthNames = {
   jan: 1,
   janeiro: 1,
@@ -777,8 +778,15 @@ function goToToday() {
   });
 }
 
+function apiBaseUrl() {
+  if (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1") {
+    return LOCAL_API_URL;
+  }
+  return CONFIGURED_API_URL || LOCAL_API_URL;
+}
+
 async function extractPdfText(file) {
-  const endpoint = `${LOCAL_API_URL}/api/extract-pdf?filename=${encodeURIComponent(file.name || "escala.pdf")}`;
+  const endpoint = `${apiBaseUrl()}/api/extract-pdf?filename=${encodeURIComponent(file.name || "escala.pdf")}`;
   try {
     const response = await fetch(endpoint, {
       method: "POST",

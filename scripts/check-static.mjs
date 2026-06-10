@@ -34,6 +34,8 @@ const css = await readFile(path.join(frontendRoot, "styles.css"), "utf8");
 const checks = [
   [rootHtml.includes('id="pilotLogin"'), "index.html precisa conter a tela de login"],
   [pilotHtml.includes('id="pilotLogin"'), "piloto/index.html precisa conter a tela de login"],
+  [rootHtml.includes('src="config.js"'), "index.html precisa carregar config.js"],
+  [pilotHtml.includes('src="../config.js"'), "piloto/index.html precisa carregar ../config.js"],
   [rootHtml.includes('href="/piloto/"'), "index.html precisa apontar para /piloto/"],
   [pilotHtml.includes("../app.js"), "piloto/index.html precisa carregar ../app.js"],
   [css.includes(".today-fab"), "styles.css precisa conter o botao Hoje"],
