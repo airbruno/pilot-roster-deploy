@@ -568,16 +568,54 @@ function setPilotLocked(locked) {
   }
 }
 
-function unlockPilot(token) {
-  const normalized = token.trim();
-  const isLocal = isLocalHost();
-  if (!normalized || (isLocal && normalized !== LOCAL_PILOT_TOKEN)) {
+async function validatePilotToken(token) {
+  const normalized = String(token || "").trim();
+  if (!normalized) return false;
+  if (isLocalHost()) return normalized === LOCAL_PILOT_TOKEN;
+
+  try {
+    const response = await fetch(`${apiBaseUrl()}/api/auth/pilot`, {
+      method: "POST",
+      headers: {
+        "X-Pilot-Token": normalized,
+      },
+    });
+    return response.ok;
+  } catch (error) {
+    console.error(error);
+    throw new Error("Nao foi possivel validar o token agora.");
+  }
+}
+
+async function unlockPilot(token) {
+  const normalized = String(token || "").trim();
+  if (!normalized) {
     if (els.loginError) {
-      els.loginError.textContent = isLocal ? "Token invalido." : "Informe o token do piloto.";
+      els.loginError.textContent = "Informe o token do piloto.";
       els.loginError.classList.add("visible");
     }
     return false;
   }
+
+  let valid = false;
+  try {
+    valid = await validatePilotToken(normalized);
+  } catch (error) {
+    if (els.loginError) {
+      els.loginError.textContent = error.message || "Nao foi possivel validar o token agora.";
+      els.loginError.classList.add("visible");
+    }
+    return false;
+  }
+
+  if (!valid) {
+    if (els.loginError) {
+      els.loginError.textContent = "Token invalido.";
+      els.loginError.classList.add("visible");
+    }
+    return false;
+  }
+
   localStorage.setItem(PILOT_TOKEN_KEY, normalized);
   sessionStorage.setItem(PILOT_SESSION_KEY, "active");
   setPilotLocked(false);
@@ -900,9 +938,9 @@ function extractPdfTextWithXHR(endpoint, file) {
 }
 
 function bindEvents() {
-  els.pilotLoginForm?.addEventListener("submit", (event) => {
+  els.pilotLoginForm?.addEventListener("submit", async (event) => {
     event.preventDefault();
-    unlockPilot(els.pilotToken?.value || "");
+    await unlockPilot(els.pilotToken?.value || "");
   });
   els.logoutButton?.addEventListener("click", logoutPilot);
   els.pilotName.addEventListener("change", syncMetaFromInputs);

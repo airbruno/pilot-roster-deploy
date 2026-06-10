@@ -56,6 +56,9 @@ class RosterAPIHandler(BaseHTTPRequestHandler):
 
   def do_POST(self):
     path = urlparse(self.path).path
+    if path == "/api/auth/pilot":
+      self.validate_pilot_token()
+      return
     if path == "/api/extract-pdf":
       self.extract_pdf()
       return
@@ -63,6 +66,12 @@ class RosterAPIHandler(BaseHTTPRequestHandler):
       self.publish_roster()
       return
     self.send_json({"error": "Endpoint nao encontrado."}, status=404)
+
+  def validate_pilot_token(self):
+    if self.headers.get("X-Pilot-Token") != PILOT_TOKEN:
+      self.send_json({"error": "Token do piloto invalido."}, status=401)
+      return
+    self.send_json({"ok": True})
 
   def extract_pdf(self):
     length = int(self.headers.get("Content-Length", "0") or "0")
