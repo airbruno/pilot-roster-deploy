@@ -1,0 +1,47 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function ownUserDoc(userId) {
+      return signedIn() && request.auth.uid == userId;
+    }
+
+    function isPilot(pilotId) {
+      return signedIn() && request.auth.uid == pilotId;
+    }
+
+    function hasFamilyAccess(pilotId) {
+      return signedIn()
+        && exists(/databases/$(database)/documents/pilots/$(pilotId)/familyAccess/$(request.auth.uid));
+    }
+
+    match /users/{userId} {
+      allow read: if ownUserDoc(userId);
+      allow create: if ownUserDoc(userId)
+        && request.resource.data.role in ['pilot', 'family']
+        && request.resource.data.pilotIds is list
+        && request.resource.data.pilotIds.size() == 0;
+      allow update: if ownUserDoc(userId)
+        && request.resource.data.diff(resource.data).changedKeys().hasOnly(['name']);
+    }
+
+    match /pilots/{pilotId} {
+      allow read: if isPilot(pilotId) || hasFamilyAccess(pilotId);
+      allow create, update: if isPilot(pilotId);
+
+      match /rosters/{month} {
+        allow read: if isPilot(pilotId) || hasFamilyAccess(pilotId);
+        allow create, update, delete: if isPilot(pilotId);
+      }
+
+      match /familyAccess/{familyUid} {
+        allow read: if isPilot(pilotId) || ownUserDoc(familyUid);
+        allow create, update, delete: if isPilot(pilotId);
+      }
+    }
+  }
+}

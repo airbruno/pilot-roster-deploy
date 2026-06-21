@@ -11,7 +11,7 @@
     <link rel="manifest" href="/manifest.webmanifest" />
     <link rel="icon" href="/icons/app-icon.svg" type="image/svg+xml" />
     <link rel="apple-touch-icon" href="/icons/app-icon.svg" />
-    <link rel="stylesheet" href="styles.css?v=20" />
+    <link rel="stylesheet" href="styles.css?v=21" />
   </head>
   <body>
     <section class="login-screen" id="pilotLogin" aria-label="Login do piloto" hidden>
@@ -23,14 +23,19 @@
         </span>
         <div>
           <p class="eyebrow">Acesso do piloto</p>
-          <h1>Entrar no portal</h1>
+          <h1>Entrar</h1>
         </div>
         <label>
-          Token do piloto
-          <input id="pilotToken" type="password" autocomplete="current-password" placeholder="Digite seu token" />
+          Email
+          <input id="authEmail" type="email" autocomplete="email" placeholder="nome@email.com" />
+        </label>
+        <label>
+          Senha
+          <input id="authPassword" type="password" autocomplete="current-password" placeholder="Digite sua senha" />
         </label>
         <div class="import-status error" id="loginError" role="alert"></div>
         <button type="submit">Entrar</button>
+        <button class="secondary" id="createAccountButton" type="button">Criar conta</button>
         <a class="login-family-link" href="/">Ver portal da família</a>
       </form>
     </section>
@@ -98,6 +103,15 @@
             <div class="import-status" id="importStatus" role="status" aria-live="polite"></div>
             <button id="publishButton" type="button">Publicar mudanças</button>
           </div>
+
+          <div class="panel-section">
+            <h2>Família autorizada</h2>
+            <label>
+              Email do familiar
+              <input id="familyAccessEmail" type="email" placeholder="familiar@email.com" />
+            </label>
+            <button id="grantFamilyButton" type="button">Liberar acesso</button>
+          </div>
         </aside>
 
         <section class="schedule-area" aria-label="Escala">
@@ -126,6 +140,10 @@
     </main>
     <button class="today-fab" id="todayButton" type="button" aria-label="Ir para hoje" title="Ir para hoje">Hoje</button>
     <script src="config.js"></script>
-    <script src="app.js?v=20"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-functions-compat.js"></script>
+    <script src="app.js?v=21"></script>
   </body>
 </html>

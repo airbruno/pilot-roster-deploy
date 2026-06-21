@@ -4,8 +4,10 @@
   "scripts": {
     "sync:frontend": "node scripts/sync-frontend.mjs",
     "check:static": "node scripts/check-static.mjs",
+    "check:functions": "node --check functions/index.js",
     "check:backend": "node scripts/check-backend.mjs",
     "check:visual": "node scripts/visual-check.mjs",
-    "predeploy": "npm run sync:frontend && npm run check:static && npm run check:backend && npm run check:visual"
+    "predeploy": "npm run check:static && npm run check:functions && npm run check:backend && npm run check:visual",
+    "deploy:firebase": "firebase deploy"
   }
 }

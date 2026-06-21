@@ -34,8 +34,13 @@ const els = {
   pilotLogin: document.querySelector("#pilotLogin"),
   pilotLoginForm: document.querySelector("#pilotLoginForm"),
   pilotToken: document.querySelector("#pilotToken"),
+  authEmail: document.querySelector("#authEmail"),
+  authPassword: document.querySelector("#authPassword"),
+  createAccountButton: document.querySelector("#createAccountButton"),
   loginError: document.querySelector("#loginError"),
   logoutButton: document.querySelector("#logoutButton"),
+  familyAccessEmail: document.querySelector("#familyAccessEmail"),
+  grantFamilyButton: document.querySelector("#grantFamilyButton"),
 };
 
 const STORAGE_KEY = "pilot-family-schedule-v1";
@@ -45,10 +50,22 @@ const PILOT_SESSION_KEY = "pilot-roster-session";
 const LOCAL_PILOT_TOKEN = "test-token";
 const LOCAL_API_URL = "http://localhost:4174";
 const CONFIGURED_API_URL = window.APP_CONFIG?.API_URL ? String(window.APP_CONFIG.API_URL).replace(/\/+$/, "") : "";
+const FIREBASE_CONFIG = window.APP_CONFIG?.FIREBASE || {};
+const FUNCTIONS_REGION = window.APP_CONFIG?.FUNCTIONS_REGION || "us-central1";
 const syncState = {
   mode: "idle",
   source: "",
   message: "",
+};
+const firebaseState = {
+  app: null,
+  auth: null,
+  db: null,
+  functions: null,
+  user: null,
+  profile: null,
+  pilotProfile: null,
+  targetPilotId: "",
 };
 const monthNames = {
   jan: 1,
@@ -96,6 +113,59 @@ const typeClass = {
   sobreaviso: "standby",
   "stand by": "standby",
 };
+
+function firebaseConfigReady() {
+  return Boolean(FIREBASE_CONFIG.apiKey && FIREBASE_CONFIG.projectId && window.firebase);
+}
+
+function firebaseEnabled() {
+  return Boolean(firebaseState.app);
+}
+
+function initFirebase() {
+  if (!firebaseConfigReady()) {
+    configureLegacyAuthUi();
+    return false;
+  }
+  firebaseState.app = window.firebase.apps.length
+    ? window.firebase.app()
+    : window.firebase.initializeApp(FIREBASE_CONFIG);
+  firebaseState.auth = window.firebase.auth();
+  firebaseState.db = window.firebase.firestore();
+  firebaseState.functions = window.firebase.app().functions(FUNCTIONS_REGION);
+  return true;
+}
+
+function configureLegacyAuthUi() {
+  const emailLabel = els.authEmail?.closest("label");
+  const passwordLabel = els.authPassword?.closest("label");
+  if (emailLabel) emailLabel.hidden = true;
+  if (passwordLabel?.firstChild) passwordLabel.firstChild.textContent = "Token do piloto";
+  if (els.authPassword) {
+    els.authPassword.placeholder = "Digite seu token";
+    els.authPassword.autocomplete = "current-password";
+  }
+  if (els.createAccountButton) els.createAccountButton.hidden = true;
+}
+
+function currentAuthRole() {
+  return isPilotPath() ? "pilot" : "family";
+}
+
+function currentUserName(user) {
+  return user?.displayName || user?.email?.split("@")[0] || "Usuário";
+}
+
+function firebaseErrorMessage(error) {
+  const code = error?.code || "";
+  if (code.includes("auth/invalid-credential") || code.includes("auth/wrong-password")) return "Email ou senha invalidos.";
+  if (code.includes("auth/user-not-found")) return "Usuario nao encontrado.";
+  if (code.includes("auth/email-already-in-use")) return "Este email ja tem uma conta.";
+  if (code.includes("auth/weak-password")) return "Use uma senha com pelo menos 6 caracteres.";
+  if (code.includes("auth/invalid-email")) return "Email invalido.";
+  if (code.includes("permission-denied")) return "Voce nao tem permissao para acessar estes dados.";
+  return error?.message || "Nao foi possivel concluir a acao.";
+}
 
 function normalizeText(value) {
   return String(value || "")
@@ -510,14 +580,14 @@ function applyRosterPayload(payload, source = "") {
 
 function savePublishedRosterCache(payload) {
   try {
-    localStorage.setItem(PUBLISHED_ROSTER_KEY, JSON.stringify(payload));
+    localStorage.setItem(publishedRosterCacheKey(), JSON.stringify(payload));
   } catch (error) {
     console.error(error);
   }
 }
 
 function loadPublishedRosterCache() {
-  const stored = localStorage.getItem(PUBLISHED_ROSTER_KEY);
+  const stored = localStorage.getItem(publishedRosterCacheKey());
   if (!stored) return false;
   try {
     const payload = JSON.parse(stored);
@@ -527,6 +597,12 @@ function loadPublishedRosterCache() {
     localStorage.removeItem(PUBLISHED_ROSTER_KEY);
     return false;
   }
+}
+
+function publishedRosterCacheKey() {
+  return firebaseState.targetPilotId
+    ? `${PUBLISHED_ROSTER_KEY}-${firebaseState.targetPilotId}`
+    : PUBLISHED_ROSTER_KEY;
 }
 
 function saveLocal() {
@@ -596,6 +672,7 @@ function isLocalHost() {
 }
 
 function hasPilotAccess() {
+  if (firebaseEnabled()) return Boolean(firebaseState.user && firebaseState.profile?.role === "pilot");
   const saved = localStorage.getItem(PILOT_TOKEN_KEY) || "";
   const activeSession = sessionStorage.getItem(PILOT_SESSION_KEY) === "active";
   if (!activeSession) return false;
@@ -608,11 +685,12 @@ function setPilotLocked(locked) {
   if (els.pilotLogin) els.pilotLogin.hidden = !locked;
   if (locked) {
     if (els.loginError) els.loginError.classList.remove("visible");
-    requestAnimationFrame(() => els.pilotToken?.focus());
+    requestAnimationFrame(() => (els.authEmail || els.pilotToken)?.focus());
   }
 }
 
 async function validatePilotToken(token) {
+  if (firebaseEnabled()) return Boolean(firebaseState.user && firebaseState.profile?.role === "pilot");
   const normalized = String(token || "").trim();
   if (!normalized) return false;
   if (isLocalHost()) return normalized === LOCAL_PILOT_TOKEN;
@@ -632,6 +710,7 @@ async function validatePilotToken(token) {
 }
 
 async function unlockPilot(token) {
+  if (firebaseEnabled()) return Boolean(firebaseState.user);
   const normalized = String(token || "").trim();
   if (!normalized) {
     if (els.loginError) {
@@ -668,10 +747,124 @@ async function unlockPilot(token) {
 }
 
 function logoutPilot() {
+  if (firebaseEnabled()) {
+    firebaseState.auth.signOut();
+    return;
+  }
   localStorage.removeItem(PILOT_TOKEN_KEY);
   sessionStorage.removeItem(PILOT_SESSION_KEY);
   if (els.pilotToken) els.pilotToken.value = "";
   setPilotLocked(true);
+}
+
+async function authenticateFirebase(createAccount = false) {
+  const email = String(els.authEmail?.value || "").trim();
+  const password = String(els.authPassword?.value || "");
+  if (!email || !password) {
+    if (els.loginError) {
+      els.loginError.textContent = "Informe email e senha.";
+      els.loginError.classList.add("visible");
+    }
+    return false;
+  }
+
+  try {
+    if (els.loginError) els.loginError.classList.remove("visible");
+    if (createAccount) {
+      const credential = await firebaseState.auth.createUserWithEmailAndPassword(email, password);
+      await ensureFirebaseUserProfile(credential.user, currentAuthRole());
+    } else {
+      await firebaseState.auth.signInWithEmailAndPassword(email, password);
+    }
+    if (els.authPassword) els.authPassword.value = "";
+    return true;
+  } catch (error) {
+    if (els.loginError) {
+      els.loginError.textContent = firebaseErrorMessage(error);
+      els.loginError.classList.add("visible");
+    }
+    return false;
+  }
+}
+
+async function ensureFirebaseUserProfile(user, fallbackRole) {
+  const userRef = firebaseState.db.collection("users").doc(user.uid);
+  const snapshot = await userRef.get();
+  if (snapshot.exists) return snapshot.data();
+
+  const profile = {
+    role: fallbackRole,
+    name: currentUserName(user),
+    email: user.email || "",
+    pilotIds: [],
+    createdAt: new Date().toISOString(),
+  };
+  await userRef.set(profile, { merge: true });
+
+  if (profile.role === "pilot") {
+    await firebaseState.db.collection("pilots").doc(user.uid).set({
+      displayName: profile.name,
+      familyNote: state.meta.familyNote,
+      createdAt: new Date().toISOString(),
+    }, { merge: true });
+  }
+
+  return profile;
+}
+
+async function loadFirebaseSession(user) {
+  firebaseState.user = user;
+  firebaseState.profile = null;
+  firebaseState.pilotProfile = null;
+  firebaseState.targetPilotId = "";
+
+  if (!user) {
+    setPilotLocked(true);
+    return;
+  }
+
+  const profile = await ensureFirebaseUserProfile(user, currentAuthRole());
+  firebaseState.profile = profile;
+
+  if (isPilotPath() && profile.role !== "pilot") {
+    if (els.loginError) {
+      els.loginError.textContent = "Esta conta nao tem perfil de piloto.";
+      els.loginError.classList.add("visible");
+    }
+    await firebaseState.auth.signOut();
+    return;
+  }
+
+  firebaseState.targetPilotId = profile.role === "pilot"
+    ? user.uid
+    : (Array.isArray(profile.pilotIds) ? profile.pilotIds[0] : "");
+
+  setPilotLocked(false);
+
+  if (profile.role === "pilot") {
+    setMode("admin");
+    await loadFirebasePilotProfile(user.uid);
+    loadLocal();
+    render();
+    return;
+  }
+
+  setMode("family");
+  await loadPublishedRoster();
+}
+
+async function loadFirebasePilotProfile(pilotId) {
+  if (!pilotId) return null;
+  const snapshot = await firebaseState.db.collection("pilots").doc(pilotId).get();
+  const profile = snapshot.exists ? snapshot.data() : {};
+  firebaseState.pilotProfile = profile;
+  state.meta.pilotName = profile.displayName || firebaseState.profile?.name || state.meta.pilotName;
+  state.meta.familyNote = profile.familyNote || state.meta.familyNote;
+  if (profile.activeRosterMonth) {
+    const [year, month] = profile.activeRosterMonth.split("-").map(Number);
+    state.visibleMonth = new Date(year, month - 1, 1);
+  }
+  return profile;
 }
 
 function setMode(mode) {
@@ -913,6 +1106,7 @@ function registerServiceWorker() {
 }
 
 async function loadPublishedRoster() {
+  if (firebaseEnabled()) return loadFirebaseRoster();
   if (!CONFIGURED_API_URL && !(window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1")) {
     return false;
   }
@@ -923,7 +1117,13 @@ async function loadPublishedRoster() {
     }
     const response = await fetch(`${apiBaseUrl()}/api/roster/public`);
     const payload = await response.json().catch(() => ({}));
-    if (!response.ok) return false;
+    if (!response.ok) {
+      if (state.mode === "family") {
+        setSyncState("idle", "Nenhuma escala publicada ainda.", syncState.source || "");
+        render();
+      }
+      return false;
+    }
     const previousUpdatedAt = state.meta.updatedAt || "";
     applyRosterPayload(payload, "network");
     savePublishedRosterCache({
@@ -956,7 +1156,70 @@ async function loadPublishedRoster() {
   }
 }
 
+async function loadFirebaseRoster() {
+  if (!firebaseState.user) return false;
+  const pilotId = firebaseState.targetPilotId;
+  if (!pilotId) {
+    setSyncState("idle", "Nenhum piloto vinculado a esta conta.", "");
+    state.duties = [];
+    render();
+    return false;
+  }
+
+  try {
+    if (state.mode === "family") {
+      setSyncState("syncing", "Sincronizando escala...", syncState.source || "");
+      render();
+    }
+    const pilotProfile = await loadFirebasePilotProfile(pilotId);
+    const rosterMonth = pilotProfile?.activeRosterMonth || monthKey(state.visibleMonth);
+    const snapshot = await firebaseState.db
+      .collection("pilots")
+      .doc(pilotId)
+      .collection("rosters")
+      .doc(rosterMonth)
+      .get();
+
+    if (!snapshot.exists) {
+      state.duties = [];
+      setSyncState("idle", "Nenhuma escala publicada para este piloto.", "");
+      render();
+      return false;
+    }
+
+    const previousUpdatedAt = state.meta.updatedAt || "";
+    applyRosterPayload(snapshot.data(), "network");
+    savePublishedRosterCache({
+      meta: state.meta,
+      duties: state.duties,
+    });
+    if (state.mode === "family") {
+      setSyncState(
+        "ready",
+        previousUpdatedAt && previousUpdatedAt === state.meta.updatedAt
+          ? "Escala já estava atualizada neste aparelho."
+          : "Nova escala sincronizada neste aparelho.",
+        "network",
+      );
+    }
+    render();
+    return true;
+  } catch (error) {
+    console.error(error);
+    setSyncState(
+      navigator.onLine ? "error" : "offline",
+      navigator.onLine
+        ? "Nao foi possivel atualizar agora. Exibindo a última escala salva neste aparelho."
+        : "Offline. Exibindo a última escala salva neste aparelho.",
+      syncState.source || "cache",
+    );
+    render();
+    return false;
+  }
+}
+
 async function publishRoster() {
+  if (firebaseEnabled()) return publishFirebaseRoster();
   const token = localStorage.getItem(PILOT_TOKEN_KEY) || "";
   if (!token) {
     throw new Error("Token do piloto nao informado.");
@@ -983,7 +1246,47 @@ async function publishRoster() {
   return payload;
 }
 
+async function publishFirebaseRoster() {
+  if (!firebaseState.user || firebaseState.profile?.role !== "pilot") {
+    throw new Error("Entre com uma conta de piloto para publicar.");
+  }
+
+  syncMetaFromInputs();
+  const rosterMonth = state.duties[0]?.date?.slice(0, 7) || monthKey(state.visibleMonth);
+  state.meta.updatedAt = new Date().toISOString();
+  const payload = {
+    meta: {
+      ...state.meta,
+      pilotName: els.pilotName.value.trim() || firebaseState.profile.name || "Piloto",
+      familyNote: els.familyNote.value.trim(),
+      updatedAt: state.meta.updatedAt,
+    },
+    duties: state.duties,
+    publishedBy: firebaseState.user.uid,
+    updatedAt: state.meta.updatedAt,
+  };
+
+  const pilotRef = firebaseState.db.collection("pilots").doc(firebaseState.user.uid);
+  await pilotRef.set({
+    displayName: payload.meta.pilotName,
+    familyNote: payload.meta.familyNote,
+    activeRosterMonth: rosterMonth,
+    updatedAt: payload.meta.updatedAt,
+  }, { merge: true });
+  await pilotRef.collection("rosters").doc(rosterMonth).set(payload);
+
+  firebaseState.targetPilotId = firebaseState.user.uid;
+  savePublishedRosterCache({
+    meta: payload.meta,
+    duties: payload.duties,
+  });
+  saveLocal();
+  render();
+  return { ok: true, count: state.duties.length, updatedAt: state.meta.updatedAt };
+}
+
 async function extractPdfText(file) {
+  if (firebaseEnabled()) return extractPdfTextWithFirebase(file);
   const endpoint = `${apiBaseUrl()}/api/extract-pdf?filename=${encodeURIComponent(file.name || "escala.pdf")}`;
   try {
     const response = await fetch(endpoint, {
@@ -1000,6 +1303,41 @@ async function extractPdfText(file) {
     if (!String(error.message || error).toLowerCase().includes("fetch")) throw error;
     return extractPdfTextWithXHR(endpoint, file);
   }
+}
+
+async function extractPdfTextWithFirebase(file) {
+  if (!firebaseState.user) throw new Error("Entre para importar PDF.");
+  const callable = firebaseState.functions.httpsCallable("extractRosterPdf");
+  const buffer = await file.arrayBuffer();
+  if (buffer.byteLength > 20 * 1024 * 1024) {
+    throw new Error("PDF muito grande. Limite atual: 20 MB.");
+  }
+  const bytes = new Uint8Array(buffer);
+  let binary = "";
+  const chunkSize = 0x8000;
+  for (let index = 0; index < bytes.length; index += chunkSize) {
+    binary += String.fromCharCode(...bytes.subarray(index, index + chunkSize));
+  }
+  const result = await callable({
+    filename: file.name || "escala.pdf",
+    pdfBase64: btoa(binary),
+  });
+  return result.data;
+}
+
+async function grantFamilyAccess() {
+  if (!firebaseEnabled()) {
+    throw new Error("Configure Firebase para liberar familiares.");
+  }
+  if (!firebaseState.user || firebaseState.profile?.role !== "pilot") {
+    throw new Error("Entre com uma conta de piloto.");
+  }
+  const email = String(els.familyAccessEmail?.value || "").trim();
+  if (!email) throw new Error("Informe o email do familiar.");
+  const callable = firebaseState.functions.httpsCallable("grantFamilyAccess");
+  await callable({ email });
+  if (els.familyAccessEmail) els.familyAccessEmail.value = "";
+  return true;
 }
 
 function extractPdfTextWithXHR(endpoint, file) {
@@ -1028,7 +1366,19 @@ function extractPdfTextWithXHR(endpoint, file) {
 function bindEvents() {
   els.pilotLoginForm?.addEventListener("submit", async (event) => {
     event.preventDefault();
-    await unlockPilot(els.pilotToken?.value || "");
+    if (firebaseEnabled()) {
+      await authenticateFirebase(false);
+    } else {
+      await unlockPilot(els.pilotToken?.value || els.authPassword?.value || "");
+    }
+  });
+  els.createAccountButton?.addEventListener("click", () => {
+    if (firebaseEnabled()) {
+      authenticateFirebase(true);
+    } else if (els.loginError) {
+      els.loginError.textContent = "Firebase ainda nao foi configurado neste ambiente.";
+      els.loginError.classList.add("visible");
+    }
   });
   els.logoutButton?.addEventListener("click", logoutPilot);
   els.pilotName.addEventListener("change", syncMetaFromInputs);
@@ -1061,6 +1411,15 @@ function bindEvents() {
       setImportStatus(error.message || "Falha ao publicar escala.", "error");
     }
   });
+  els.grantFamilyButton?.addEventListener("click", async () => {
+    try {
+      setImportStatus("Liberando acesso...", "busy");
+      await grantFamilyAccess();
+      setImportStatus("Acesso liberado para o familiar.", "ok");
+    } catch (error) {
+      setImportStatus(firebaseErrorMessage(error), "error");
+    }
+  });
   els.prevMonth.addEventListener("click", () => shiftMonth(-1));
   els.nextMonth.addEventListener("click", () => shiftMonth(1));
   els.todayButton.addEventListener("click", goToToday);
@@ -1073,9 +1432,26 @@ function bindEvents() {
 
 function init() {
   registerServiceWorker();
+  initFirebase();
   const isPilotRoute = isPilotPath();
   const shared = readShareFromUrl();
   bindEvents();
+
+  if (firebaseEnabled() && !shared) {
+    setPilotLocked(true);
+    firebaseState.auth.onAuthStateChanged((user) => {
+      loadFirebaseSession(user).catch((error) => {
+        console.error(error);
+        if (els.loginError) {
+          els.loginError.textContent = firebaseErrorMessage(error);
+          els.loginError.classList.add("visible");
+        }
+        setPilotLocked(true);
+      });
+    });
+    return;
+  }
+
   if (isPilotRoute && !shared) {
     loadLocal();
     if (state.duties[0]) {
