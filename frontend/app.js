@@ -39,11 +39,17 @@ const els = {
 };
 
 const STORAGE_KEY = "pilot-family-schedule-v1";
+const PUBLISHED_ROSTER_KEY = "pilot-family-published-v1";
 const PILOT_TOKEN_KEY = "pilot-roster-token";
 const PILOT_SESSION_KEY = "pilot-roster-session";
 const LOCAL_PILOT_TOKEN = "test-token";
 const LOCAL_API_URL = "http://localhost:4174";
 const CONFIGURED_API_URL = window.APP_CONFIG?.API_URL ? String(window.APP_CONFIG.API_URL).replace(/\/+$/, "") : "";
+const syncState = {
+  mode: "idle",
+  source: "",
+  message: "",
+};
 const monthNames = {
   jan: 1,
   janeiro: 1,
@@ -485,6 +491,44 @@ function sortDuties() {
   state.duties.sort((a, b) => `${a.date} ${a.start}`.localeCompare(`${b.date} ${b.start}`));
 }
 
+function setSyncState(mode, message = "", source = "") {
+  syncState.mode = mode;
+  syncState.message = message;
+  syncState.source = source;
+}
+
+function applyRosterPayload(payload, source = "") {
+  state.meta = { ...state.meta, ...(payload.meta || {}) };
+  state.duties = Array.isArray(payload.duties) ? payload.duties.map(normalizeDuty).filter(Boolean) : [];
+  sortDuties();
+  if (state.duties[0]) {
+    const [year, month] = state.duties[0].date.split("-").map(Number);
+    state.visibleMonth = new Date(year, month - 1, 1);
+  }
+  if (source) syncState.source = source;
+}
+
+function savePublishedRosterCache(payload) {
+  try {
+    localStorage.setItem(PUBLISHED_ROSTER_KEY, JSON.stringify(payload));
+  } catch (error) {
+    console.error(error);
+  }
+}
+
+function loadPublishedRosterCache() {
+  const stored = localStorage.getItem(PUBLISHED_ROSTER_KEY);
+  if (!stored) return false;
+  try {
+    const payload = JSON.parse(stored);
+    applyRosterPayload(payload, "cache");
+    return true;
+  } catch {
+    localStorage.removeItem(PUBLISHED_ROSTER_KEY);
+    return false;
+  }
+}
+
 function saveLocal() {
   if (state.mode === "family") return;
   localStorage.setItem(STORAGE_KEY, JSON.stringify({ meta: state.meta, duties: state.duties }));
@@ -661,29 +705,51 @@ function renderSummary() {
 }
 
 function formatUpdatedAt() {
-  if (!state.duties.length) return state.mode === "family" ? "Aguardando publicação" : "Nenhuma escala importada";
-  return `Atualizado em ${new Intl.DateTimeFormat("pt-BR", {
+  const base = !state.duties.length
+    ? (state.mode === "family" ? "Aguardando publicação" : "Nenhuma escala importada")
+    : `Atualizado em ${new Intl.DateTimeFormat("pt-BR", {
     day: "2-digit",
     month: "2-digit",
     year: "numeric",
     hour: "2-digit",
     minute: "2-digit",
   }).format(new Date(state.meta.updatedAt || Date.now()))}`;
+  if (state.mode !== "family" || !syncState.message) return base;
+  return `${base} • ${syncState.message}`;
 }
 
 function emptyStateMarkup() {
-  const message = state.mode === "family"
-    ? "Nenhuma escala publicada ainda."
-    : "Importe um PDF ou carregue dados para visualizar a escala.";
-  const detail = state.mode === "family"
-    ? "Assim que o piloto publicar uma escala, os dias aparecem aqui."
-    : "Use o painel do piloto para importar uma escala mensal.";
+  const isOfflineFamily = state.mode === "family" && !navigator.onLine;
+  const message = isOfflineFamily
+    ? "Sem internet e sem escala salva neste aparelho."
+    : state.mode === "family"
+      ? "Nenhuma escala publicada ainda."
+      : "Importe um PDF ou carregue dados para visualizar a escala.";
+  const detail = isOfflineFamily
+    ? "Abra esta página online pelo menos uma vez para manter a última escala disponível offline."
+    : state.mode === "family"
+      ? "Assim que o piloto publicar uma escala, os dias aparecem aqui."
+      : "Use o painel do piloto para importar uma escala mensal.";
   return `
     <div class="empty-state">
       <strong>${escapeHtml(message)}</strong>
       <span>${escapeHtml(detail)}</span>
     </div>
   `;
+}
+
+function updateConnectivityStatus() {
+  if (state.mode !== "family") return;
+  if (!navigator.onLine) {
+    setSyncState("offline", "Offline. Exibindo a última escala salva neste aparelho.", syncState.source || "cache");
+  } else if (syncState.source === "cache" || syncState.mode === "offline") {
+    setSyncState("syncing", "Sincronizando escala...", syncState.source || "cache");
+  } else if (syncState.source === "network") {
+    setSyncState("ready", "Escala atualizada neste aparelho.", "network");
+  } else {
+    setSyncState("idle");
+  }
+  render();
 }
 
 function dutiesForMonth() {
@@ -851,19 +917,41 @@ async function loadPublishedRoster() {
     return false;
   }
   try {
+    if (state.mode === "family") {
+      setSyncState("syncing", "Sincronizando escala...", syncState.source || "");
+      render();
+    }
     const response = await fetch(`${apiBaseUrl()}/api/roster/public`);
     const payload = await response.json().catch(() => ({}));
     if (!response.ok) return false;
-    state.meta = { ...state.meta, ...(payload.meta || {}) };
-    state.duties = Array.isArray(payload.duties) ? payload.duties.map(normalizeDuty).filter(Boolean) : [];
-    sortDuties();
-    if (state.duties[0]) {
-      const [year, month] = state.duties[0].date.split("-").map(Number);
-      state.visibleMonth = new Date(year, month - 1, 1);
+    const previousUpdatedAt = state.meta.updatedAt || "";
+    applyRosterPayload(payload, "network");
+    savePublishedRosterCache({
+      meta: state.meta,
+      duties: state.duties,
+    });
+    if (state.mode === "family") {
+      setSyncState(
+        "ready",
+        previousUpdatedAt && previousUpdatedAt === state.meta.updatedAt
+          ? "Escala já estava atualizada neste aparelho."
+          : "Nova escala sincronizada neste aparelho.",
+        "network",
+      );
     }
     render();
     return true;
   } catch {
+    if (state.mode === "family") {
+      setSyncState(
+        navigator.onLine ? "error" : "offline",
+        navigator.onLine
+          ? "Nao foi possivel atualizar agora. Exibindo a última escala salva neste aparelho."
+          : "Offline. Exibindo a última escala salva neste aparelho.",
+        syncState.source || "cache",
+      );
+      render();
+    }
     return false;
   }
 }
@@ -976,19 +1064,24 @@ function bindEvents() {
   els.prevMonth.addEventListener("click", () => shiftMonth(-1));
   els.nextMonth.addEventListener("click", () => shiftMonth(1));
   els.todayButton.addEventListener("click", goToToday);
+  window.addEventListener("online", () => {
+    updateConnectivityStatus();
+    if (state.mode === "family") loadPublishedRoster();
+  });
+  window.addEventListener("offline", updateConnectivityStatus);
 }
 
 function init() {
   registerServiceWorker();
   const isPilotRoute = isPilotPath();
   const shared = readShareFromUrl();
-  if (!shared) loadLocal();
-  if (state.duties[0]) {
-    const [year, month] = state.duties[0].date.split("-").map(Number);
-    state.visibleMonth = new Date(year, month - 1, 1);
-  }
   bindEvents();
   if (isPilotRoute && !shared) {
+    loadLocal();
+    if (state.duties[0]) {
+      const [year, month] = state.duties[0].date.split("-").map(Number);
+      state.visibleMonth = new Date(year, month - 1, 1);
+    }
     if (!hasPilotAccess()) {
       setMode("admin");
       setPilotLocked(true);
@@ -1000,7 +1093,11 @@ function init() {
   }
   setPilotLocked(false);
   setMode("family");
-  loadPublishedRoster();
+  if (!shared) {
+    loadPublishedRosterCache();
+    updateConnectivityStatus();
+    loadPublishedRoster();
+  }
 }
 
 init();
