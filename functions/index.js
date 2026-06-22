@@ -1,7 +1,6 @@
 const admin = require("firebase-admin");
 const { FieldValue } = require("firebase-admin/firestore");
 const { HttpsError, onCall } = require("firebase-functions/v2/https");
-const pdfParse = require("pdf-parse");
 
 admin.initializeApp();
 
@@ -35,6 +34,7 @@ exports.extractRosterPdf = onCall({
   }
 
   try {
+    const pdfParse = require("pdf-parse");
     const parsed = await pdfParse(buffer);
     const text = String(parsed.text || "").trim();
     if (!text) {

@@ -3,4 +3,5 @@ functions/node_modules/
 __pycache__/
 backend/__pycache__/
 firebase-debug.log
+.firebase/
 .firebaserc
