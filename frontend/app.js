@@ -339,6 +339,13 @@ function parseDate(value) {
 
 function parseFlexibleDate(value, fallbackYear) {
   const raw = String(value || "").trim();
+  const compactRosterDate = raw.match(/^(\d{1,2})-([A-Za-zçÇ]{3,9})-(\d{2,4})/);
+  if (compactRosterDate) {
+    const month = monthNames[normalizeText(compactRosterDate[2])];
+    const year = compactRosterDate[3].length === 2 ? `20${compactRosterDate[3]}` : compactRosterDate[3];
+    if (month) return `${year}-${String(month).padStart(2, "0")}-${compactRosterDate[1].padStart(2, "0")}`;
+  }
+
   const rosterDate = raw.match(/\b(\d{1,2})[-\s]([A-Za-zçÇ]{3,9})[-\s](\d{2,4})\b/);
   if (rosterDate) {
     const month = monthNames[normalizeText(rosterDate[2])];
@@ -398,14 +405,58 @@ function findNextDutyEnd(timeMatches, departure, arrival) {
 function findActivityEnd(timeMatches) {
   if (!timeMatches.length) return "";
   if (timeMatches.length >= 5) return timeMatches[timeMatches.length - 3];
+  if (timeMatches.length >= 2) return timeMatches[1];
   return timeMatches[timeMatches.length - 1];
 }
 
+function compactRosterBody(line) {
+  return String(line || "")
+    .replace(/^\d{1,2}-[A-Za-zçÇ]{3,9}-\d{2,4}/, "")
+    .replace(/\s+/g, "")
+    .toUpperCase();
+}
+
+function parseCompactFlightLine(line, date, timeMatches) {
+  const body = compactRosterBody(line);
+  const compactFlight = body.match(/^(?:(\d{1,2}:\d{2}))?([A-Z]{2}\d{3,5})(?:FDT|FO|CA|CAPT|SEN)(?:OP|DH|PS)?([A-Z]{3})(\d{1,2}:\d{2})([A-Z]{3})(\d{1,2}:\d{2})/);
+  if (!compactFlight) return null;
+
+  return normalizeDuty({
+    date,
+    reportTime: compactFlight[1] || "",
+    start: compactFlight[4],
+    end: compactFlight[6],
+    dutyEnd: findNextDutyEnd(timeMatches, compactFlight[4], compactFlight[6]),
+    type: "Voo",
+    from: compactFlight[3],
+    to: compactFlight[5],
+    flight: compactFlight[2],
+    notes: line,
+  });
+}
+
+function compactActivityBase(line) {
+  const body = compactRosterBody(line);
+  const activity = body.match(/(?:ASB|HSBE?|DO)(?:-\d+)?(?:\/\d{6}\/[A-Z0-9-]+)?(?:-?P)?(?:FDT|FO|CA|CAPT|SEN)?(?:OP|DH|PS)?(?:(?:\d{1,2}:\d{2}))*([A-Z]{3})/);
+  return activity ? activity[1] : "";
+}
+
+function compactActivityCode(line) {
+  const body = compactRosterBody(line);
+  const activity = body.match(/^(?:\d{1,2}:\d{2})?(ASB|HSBE?|DO)(?=-|\d|FDT|FO|CA|CAPT|SEN|[A-Z]{3}|$)/);
+  return activity ? activity[1] : "";
+}
+
 function inferType(line, hasRouteOrFlight) {
+  const compactCode = compactActivityCode(line);
+  if (compactCode === "ASB") return "Reserva";
+  if (compactCode === "HSB" || compactCode === "HSBE") return "Sobreaviso";
+  if (compactCode === "DO") return "Folga";
+
   const normalized = normalizeText(line);
-  if (/\b(folga|day off|off|do)\b/.test(normalized)) return "Folga";
-  if (/\b(sobreaviso|standby|hsb|hsbe)\b/.test(normalized)) return "Sobreaviso";
-  if (/\b(reserva|sb|asb)\b/.test(normalized)) return "Reserva";
+  if (/(^|[^a-z])(folga|day off|off|do)(?=[^a-z]|\d|$)/.test(normalized)) return "Folga";
+  if (/(^|[^a-z])(sobreaviso|standby|hsb|hsbe)(?=[^a-z]|\d|$)/.test(normalized)) return "Sobreaviso";
+  if (/(^|[^a-z])(reserva|sb|asb)(?=[^a-z]|\d|$)/.test(normalized)) return "Reserva";
   if (/\b(treinamento|simulador|simulator|curso|ground school|reciclagem)\b/.test(normalized)) return "Treinamento";
   if (/\b(posicionamento|deadhead|dh|deslocamento)\b/.test(normalized)) return "Voo";
   return hasRouteOrFlight ? "Voo" : "Programação";
@@ -435,9 +486,15 @@ function parsePlainScheduleText(text) {
     if (/^(data|date|pagina|page|emitido|impresso|trip|escala|roster report)\b/.test(normalized)) continue;
     if (/\/\d{6}\//.test(line) && !/\b(?:[01]?\d|2[0-3])(?::|h)[0-5]\d\b/.test(line)) continue;
 
-    const timeMatches = [...line.matchAll(/\b(?:[01]?\d|2[0-3])(?::|h)[0-5]\d\b/g)]
+    const timeMatches = [...line.matchAll(/(?:[01]?\d|2[0-3])(?::|h)[0-5]\d/g)]
       .map((match) => normalizeTime(match[0].replace("h", ":")))
       .filter(Boolean);
+    const compactFlightDuty = parseCompactFlightLine(line, date, timeMatches);
+    if (compactFlightDuty) {
+      duties.push(compactFlightDuty);
+      continue;
+    }
+
     const rosterFlight = line.toUpperCase().match(/\b([A-Z]{2}\s?\d{3,5})\s+(?:(?:FDT|FO|CA|CAPT|SEN)\s+)?(?:(?:OP|DH)\s+)?([A-Z]{3})\s+((?:[01]?\d|2[0-3]):[0-5]\d)\s+([A-Z]{3})\s+((?:[01]?\d|2[0-3]):[0-5]\d)\b/);
     if (rosterFlight) {
       const dutyEnd = findNextDutyEnd(timeMatches, rosterFlight[3], rosterFlight[5]);
@@ -460,11 +517,16 @@ function parsePlainScheduleText(text) {
     const airportMatches = [...line.toUpperCase().matchAll(/\b[A-Z]{3}\b/g)]
       .map((match) => match[0])
       .filter((code) => !["PDF", "UTC", "DOM", "SEG", "TER", "QUA", "QUI", "SEX", "SAB", "JAN", "FEV", "MAR", "ABR", "MAI", "JUN", "JUL", "AGO", "SET", "OUT", "NOV", "DEZ", "ASB", "HSB"].includes(code));
+    if (!airportMatches.length) {
+      const base = compactActivityBase(line);
+      if (base) airportMatches.push(base);
+    }
     const flightMatch = line.toUpperCase().match(/\b[A-Z]{2}\s?\d{3,5}\b/);
-    const hasKeyword = /\b(voo|flight|folga|reserva|standby|treinamento|simulador|curso|posicionamento|deadhead|pernoite|DO|ASB|HSB|HSBE)\b/i.test(line);
+    const hasKeyword = /(^|[^A-Z])(voo|flight|folga|reserva|standby|treinamento|simulador|curso|posicionamento|deadhead|pernoite|DO|ASB|HSB|HSBE)(?=[^A-Z]|\d|$)/i.test(line) || Boolean(compactActivityCode(line));
     const hasRouteOrFlight = airportMatches.length >= 2 || Boolean(flightMatch);
 
     if (!lineDate && !hasKeyword && !hasRouteOrFlight) continue;
+    if (!timeMatches.length && !hasRouteOrFlight) continue;
     if (!hasKeyword && !hasRouteOrFlight && timeMatches.length < 2) continue;
 
     const type = inferType(line, hasRouteOrFlight);
