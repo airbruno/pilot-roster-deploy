@@ -135,7 +135,7 @@ label {
   align-items: center;
   background: #16283e;
   border-radius: 8px;
-  display: inline-flex;
+  display: none;
   flex: 0 0 52px;
   height: 52px;
   justify-content: center;
@@ -453,7 +453,7 @@ body.pilot-locked .today-fab {
 
 .day-title {
   align-items: baseline;
-  display: inline-flex;
+  display: none;
   gap: 8px;
 }
 
@@ -716,6 +716,33 @@ body.family-mode .schedule-area {
   position: fixed;
   right: 18px;
   z-index: 20;
+}
+
+.family-logout {
+  align-items: center;
+  background: #1a2636;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 999px;
+  bottom: 74px;
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.32);
+  color: var(--ink);
+  display: none;
+  font-size: 0.86rem;
+  font-weight: 900;
+  justify-content: center;
+  min-height: 42px;
+  padding: 0 16px;
+  position: fixed;
+  right: 18px;
+  z-index: 20;
+}
+
+body.family-mode .family-logout {
+  display: inline-flex;
+}
+
+body.pilot-locked .family-logout {
+  display: none;
 }
 
 @media (max-width: 920px) {

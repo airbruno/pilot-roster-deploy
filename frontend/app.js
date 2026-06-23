@@ -39,6 +39,7 @@ const els = {
   createAccountButton: document.querySelector("#createAccountButton"),
   loginError: document.querySelector("#loginError"),
   logoutButton: document.querySelector("#logoutButton"),
+  familyLogoutButton: document.querySelector("#familyLogoutButton"),
   familyAccessEmail: document.querySelector("#familyAccessEmail"),
   grantFamilyButton: document.querySelector("#grantFamilyButton"),
 };
@@ -885,10 +886,11 @@ async function loadFirebaseSession(user) {
     return;
   }
 
+  const isPilotRoute = isPilotPath();
   const profile = await ensureFirebaseUserProfile(user, currentAuthRole());
   firebaseState.profile = profile;
 
-  if (isPilotPath() && profile.role !== "pilot") {
+  if (isPilotRoute && profile.role !== "pilot") {
     if (els.loginError) {
       els.loginError.textContent = "Esta conta nao tem perfil de piloto.";
       els.loginError.classList.add("visible");
@@ -903,7 +905,7 @@ async function loadFirebaseSession(user) {
 
   setPilotLocked(false);
 
-  if (profile.role === "pilot") {
+  if (isPilotRoute && profile.role === "pilot") {
     setMode("admin");
     await loadFirebasePilotProfile(user.uid);
     loadLocal();
@@ -932,8 +934,9 @@ async function loadFirebasePilotProfile(pilotId) {
 function setMode(mode) {
   state.mode = mode;
   document.body.classList.toggle("family-mode", mode === "family");
-  els.adminTab.classList.toggle("active", mode === "admin");
-  els.familyTab.classList.toggle("active", mode === "family");
+  els.adminTab?.classList.toggle("active", mode === "admin");
+  els.familyTab?.classList.toggle("active", mode === "family");
+  if (els.adminTab) els.adminTab.hidden = firebaseEnabled() && firebaseState.profile?.role !== "pilot";
   els.portalLabel.textContent = mode === "family" ? `Portal da família de ${state.meta.pilotName || "piloto"}` : "Área do piloto";
   render();
 }
@@ -1443,6 +1446,7 @@ function bindEvents() {
     }
   });
   els.logoutButton?.addEventListener("click", logoutPilot);
+  els.familyLogoutButton?.addEventListener("click", logoutPilot);
   els.pilotName.addEventListener("change", syncMetaFromInputs);
   els.familyNote.addEventListener("change", syncMetaFromInputs);
   els.fileInput.addEventListener("change", async (event) => {

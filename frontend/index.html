@@ -11,7 +11,7 @@
     <link rel="manifest" href="/manifest.webmanifest" />
     <link rel="icon" href="/icons/app-icon.svg" type="image/svg+xml" />
     <link rel="apple-touch-icon" href="/icons/app-icon.svg" />
-    <link rel="stylesheet" href="styles.css?v=22" />
+    <link rel="stylesheet" href="styles.css?v=23" />
   </head>
   <body>
     <section class="login-screen" id="pilotLogin" aria-label="Login do piloto" hidden>
@@ -55,7 +55,7 @@
         <nav class="view-toggle" aria-label="Navegação">
           <a class="nav-link" id="familyTab" href="/">Família</a>
           <a class="nav-link admin-only-nav" id="adminTab" href="/piloto/">Piloto</a>
-          <button class="nav-link logout-button admin-only" id="logoutButton" type="button">Sair</button>
+          <button class="nav-link logout-button" id="logoutButton" type="button">Sair</button>
         </nav>
       </section>
 
@@ -138,12 +138,13 @@
         </section>
       </section>
     </main>
+    <button class="family-logout family-only" id="familyLogoutButton" type="button">Sair</button>
     <button class="today-fab" id="todayButton" type="button" aria-label="Ir para hoje" title="Ir para hoje">Hoje</button>
     <script src="config.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-functions-compat.js"></script>
-    <script src="app.js?v=22"></script>
+    <script src="app.js?v=23"></script>
   </body>
 </html>
