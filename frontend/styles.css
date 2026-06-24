@@ -359,6 +359,11 @@ body.pilot-locked .today-fab {
   text-align: center;
 }
 
+.access-empty.error {
+  border-color: rgba(239, 118, 118, 0.34);
+  color: var(--red);
+}
+
 .access-row {
   align-items: center;
   background: #0a111b;
@@ -496,7 +501,9 @@ body.pilot-locked .today-fab {
 
 .day-number {
   align-items: center;
+  color: var(--ink);
   display: flex;
+  flex-wrap: wrap;
   gap: 10px;
   font-weight: 800;
   justify-content: flex-start;
@@ -504,18 +511,23 @@ body.pilot-locked .today-fab {
 
 .day-title {
   align-items: baseline;
-  display: none;
+  display: inline-flex;
   gap: 8px;
+  min-width: 0;
 }
 
 .day-date {
+  color: var(--ink);
+  display: inline-block;
   font-size: 1.05rem;
+  min-width: 1.35em;
 }
 
 .day-weekday {
   color: var(--muted);
+  display: inline-block;
   font-size: 0.86rem;
-  text-transform: capitalize;
+  text-transform: none;
 }
 
 .badge {

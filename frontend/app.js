@@ -285,6 +285,12 @@ function formatDate(dateString, options = { day: "2-digit", month: "short", week
   return new Intl.DateTimeFormat("pt-BR", options).format(new Date(year, month - 1, day));
 }
 
+function formatWeekdayName(date) {
+  return new Intl.DateTimeFormat("pt-BR", { weekday: "long" })
+    .format(date)
+    .toLocaleLowerCase("pt-BR");
+}
+
 function monthKey(date) {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
 }
@@ -963,10 +969,24 @@ async function claimPendingFamilyAccess() {
 async function loadFamilyAccessList() {
   if (!firebaseEnabled() || !firebaseState.user || firebaseState.profile?.role !== "pilot") return [];
   const pilotRef = firebaseState.db.collection("pilots").doc(firebaseState.user.uid);
-  const [accessSnapshot, inviteSnapshot] = await Promise.all([
-    pilotRef.collection("familyAccess").get(),
-    pilotRef.collection("familyInvites").get(),
-  ]);
+  if (els.familyAccessList) {
+    els.familyAccessList.innerHTML = `<div class="access-empty">Carregando familiares...</div>`;
+  }
+  let accessSnapshot;
+  let inviteSnapshot;
+  try {
+    [accessSnapshot, inviteSnapshot] = await Promise.all([
+      pilotRef.collection("familyAccess").get(),
+      pilotRef.collection("familyInvites").get(),
+    ]);
+  } catch (error) {
+    console.error(error);
+    firebaseState.familyAccess = [];
+    if (els.familyAccessList) {
+      els.familyAccessList.innerHTML = `<div class="access-empty error">Nao foi possivel carregar a lista de familiares.</div>`;
+    }
+    return [];
+  }
   const accessByEmail = new Map();
   accessSnapshot.forEach((doc) => {
     const data = doc.data();
@@ -999,6 +1019,7 @@ async function loadFamilyAccessList() {
 
 function renderFamilyAccessList() {
   if (!els.familyAccessList) return;
+  if (state.mode !== "admin") return;
   if (!firebaseEnabled()) {
     els.familyAccessList.innerHTML = `<div class="access-empty">Configure Firebase para gerenciar familiares.</div>`;
     return;
@@ -1161,7 +1182,7 @@ function renderCalendar() {
     const duties = dayDuties.length ? dayDuties.map(renderDutyLine).join("") : inactive
       ? `<div class="mini-duty flight inactive-duty">${bedIcon()}<span>Inativo</span></div>`
       : `<div class="no-data">Sem dados</div>`;
-    const weekdayName = new Intl.DateTimeFormat("pt-BR", { weekday: "long" }).format(date);
+    const weekdayName = formatWeekdayName(date);
     els.calendar.insertAdjacentHTML("beforeend", `
       <article class="day ${key === currentToday ? "today" : ""}" data-date="${key}">
         <div class="day-number">
