@@ -30,6 +30,7 @@ async function requirePilot(db, uid) {
 
 exports.extractRosterPdf = onCall({
   region: "us-central1",
+  invoker: "public",
   memory: "512MiB",
   timeoutSeconds: 60,
 }, async (request) => {
@@ -72,6 +73,7 @@ exports.extractRosterPdf = onCall({
 
 exports.grantFamilyAccess = onCall({
   region: "us-central1",
+  invoker: "public",
 }, async (request) => {
   const pilotUid = requireAuth(request);
   const email = normalizeEmail(request.data?.email);
@@ -139,6 +141,7 @@ exports.grantFamilyAccess = onCall({
 
 exports.claimFamilyAccess = onCall({
   region: "us-central1",
+  invoker: "public",
 }, async (request) => {
   const familyUid = requireAuth(request);
   const email = normalizeEmail(request.auth?.token?.email);
@@ -191,6 +194,7 @@ exports.claimFamilyAccess = onCall({
 
 exports.revokeFamilyAccess = onCall({
   region: "us-central1",
+  invoker: "public",
 }, async (request) => {
   const pilotUid = requireAuth(request);
   const email = normalizeEmail(request.data?.email);
