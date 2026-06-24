@@ -344,6 +344,57 @@ body.pilot-locked .today-fab {
   color: #a8c2ff;
 }
 
+.access-list {
+  display: grid;
+  gap: 8px;
+}
+
+.access-empty {
+  border: 1px dashed var(--line);
+  border-radius: 8px;
+  color: var(--muted);
+  font-size: 0.86rem;
+  line-height: 1.35;
+  padding: 12px;
+  text-align: center;
+}
+
+.access-row {
+  align-items: center;
+  background: #0a111b;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  display: grid;
+  gap: 10px;
+  grid-template-columns: minmax(0, 1fr) auto;
+  padding: 10px;
+}
+
+.access-person {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.access-person strong {
+  color: var(--ink);
+  font-size: 0.88rem;
+  overflow-wrap: anywhere;
+}
+
+.access-person span {
+  color: var(--muted);
+  font-size: 0.76rem;
+  font-weight: 800;
+}
+
+.access-remove {
+  background: rgba(239, 118, 118, 0.14);
+  color: #ffb0b0;
+  min-height: 34px;
+  padding: 0 10px;
+}
+
 .button-row,
 .two-col,
 .toolbar-actions {

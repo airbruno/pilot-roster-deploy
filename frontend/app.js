@@ -42,6 +42,7 @@ const els = {
   familyLogoutButton: document.querySelector("#familyLogoutButton"),
   familyAccessEmail: document.querySelector("#familyAccessEmail"),
   grantFamilyButton: document.querySelector("#grantFamilyButton"),
+  familyAccessList: document.querySelector("#familyAccessList"),
 };
 
 const STORAGE_KEY = "pilot-family-schedule-v1";
@@ -67,6 +68,7 @@ const firebaseState = {
   profile: null,
   pilotProfile: null,
   targetPilotId: "",
+  familyAccess: [],
 };
 const monthNames = {
   jan: 1,
@@ -908,11 +910,13 @@ async function loadFirebaseSession(user) {
   if (isPilotRoute && profile.role === "pilot") {
     setMode("admin");
     await loadFirebasePilotProfile(user.uid);
+    await loadFamilyAccessList();
     loadLocal();
     render();
     return;
   }
 
+  await claimPendingFamilyAccess();
   setMode("family");
   await loadPublishedRoster();
 }
@@ -939,6 +943,82 @@ function setMode(mode) {
   if (els.adminTab) els.adminTab.hidden = firebaseEnabled() && firebaseState.profile?.role !== "pilot";
   els.portalLabel.textContent = mode === "family" ? `Portal da família de ${state.meta.pilotName || "piloto"}` : "Área do piloto";
   render();
+}
+
+async function claimPendingFamilyAccess() {
+  if (!firebaseEnabled() || !firebaseState.user || firebaseState.profile?.role !== "family") return;
+  try {
+    const callable = firebaseState.functions.httpsCallable("claimFamilyAccess");
+    const result = await callable({});
+    if (result.data?.claimed) {
+      const snapshot = await firebaseState.db.collection("users").doc(firebaseState.user.uid).get();
+      firebaseState.profile = snapshot.exists ? snapshot.data() : firebaseState.profile;
+      firebaseState.targetPilotId = Array.isArray(firebaseState.profile?.pilotIds) ? firebaseState.profile.pilotIds[0] : "";
+    }
+  } catch (error) {
+    console.error(error);
+  }
+}
+
+async function loadFamilyAccessList() {
+  if (!firebaseEnabled() || !firebaseState.user || firebaseState.profile?.role !== "pilot") return [];
+  const pilotRef = firebaseState.db.collection("pilots").doc(firebaseState.user.uid);
+  const [accessSnapshot, inviteSnapshot] = await Promise.all([
+    pilotRef.collection("familyAccess").get(),
+    pilotRef.collection("familyInvites").get(),
+  ]);
+  const accessByEmail = new Map();
+  accessSnapshot.forEach((doc) => {
+    const data = doc.data();
+    const email = String(data.email || "").toLowerCase();
+    if (!email) return;
+    accessByEmail.set(email, {
+      id: doc.id,
+      email,
+      familyUid: doc.id,
+      familyName: data.familyName || email,
+      status: "active",
+    });
+  });
+  inviteSnapshot.forEach((doc) => {
+    const data = doc.data();
+    const email = String(data.email || "").toLowerCase();
+    if (!email || accessByEmail.has(email)) return;
+    accessByEmail.set(email, {
+      id: doc.id,
+      email,
+      familyUid: data.familyUid || "",
+      familyName: data.familyName || email,
+      status: data.status || "pending",
+    });
+  });
+  firebaseState.familyAccess = [...accessByEmail.values()].sort((a, b) => a.email.localeCompare(b.email));
+  renderFamilyAccessList();
+  return firebaseState.familyAccess;
+}
+
+function renderFamilyAccessList() {
+  if (!els.familyAccessList) return;
+  if (!firebaseEnabled()) {
+    els.familyAccessList.innerHTML = `<div class="access-empty">Configure Firebase para gerenciar familiares.</div>`;
+    return;
+  }
+  if (!firebaseState.familyAccess.length) {
+    els.familyAccessList.innerHTML = `<div class="access-empty">Nenhum familiar autorizado.</div>`;
+    return;
+  }
+  els.familyAccessList.innerHTML = firebaseState.familyAccess.map((item) => {
+    const status = item.status === "active" ? "Ativo" : "Pendente";
+    return `
+      <div class="access-row">
+        <div class="access-person">
+          <strong>${escapeHtml(item.email)}</strong>
+          <span>${escapeHtml(status)}</span>
+        </div>
+        <button class="access-remove" type="button" data-family-uid="${escapeHtml(item.familyUid)}" data-email="${escapeHtml(item.email)}">Remover</button>
+      </div>
+    `;
+  }).join("");
 }
 
 function syncMetaFromInputs() {
@@ -1103,6 +1183,7 @@ function render() {
   els.scheduleFooter.textContent = formatUpdatedAt();
   renderSummary();
   renderCalendar();
+  if (state.mode === "admin") renderFamilyAccessList();
 }
 
 function setImportStatus(message, tone = "busy") {
@@ -1400,8 +1481,22 @@ async function grantFamilyAccess() {
   const email = String(els.familyAccessEmail?.value || "").trim();
   if (!email) throw new Error("Informe o email do familiar.");
   const callable = firebaseState.functions.httpsCallable("grantFamilyAccess");
-  await callable({ email });
+  const result = await callable({ email });
   if (els.familyAccessEmail) els.familyAccessEmail.value = "";
+  await loadFamilyAccessList();
+  return result.data || { ok: true };
+}
+
+async function revokeFamilyAccess({ email, familyUid }) {
+  if (!firebaseEnabled()) {
+    throw new Error("Configure Firebase para remover familiares.");
+  }
+  if (!firebaseState.user || firebaseState.profile?.role !== "pilot") {
+    throw new Error("Entre com uma conta de piloto.");
+  }
+  const callable = firebaseState.functions.httpsCallable("revokeFamilyAccess");
+  await callable({ email, familyUid });
+  await loadFamilyAccessList();
   return true;
 }
 
@@ -1480,8 +1575,25 @@ function bindEvents() {
   els.grantFamilyButton?.addEventListener("click", async () => {
     try {
       setImportStatus("Liberando acesso...", "busy");
-      await grantFamilyAccess();
-      setImportStatus("Acesso liberado para o familiar.", "ok");
+      const result = await grantFamilyAccess();
+      const message = result.status === "pending"
+        ? "Email liberado. O acesso sera ativado quando o familiar criar conta com esse email."
+        : "Acesso liberado para o familiar.";
+      setImportStatus(message, "ok");
+    } catch (error) {
+      setImportStatus(firebaseErrorMessage(error), "error");
+    }
+  });
+  els.familyAccessList?.addEventListener("click", async (event) => {
+    const button = event.target.closest(".access-remove");
+    if (!button) return;
+    try {
+      setImportStatus("Removendo acesso...", "busy");
+      await revokeFamilyAccess({
+        email: button.dataset.email || "",
+        familyUid: button.dataset.familyUid || "",
+      });
+      setImportStatus("Acesso removido.", "ok");
     } catch (error) {
       setImportStatus(firebaseErrorMessage(error), "error");
     }

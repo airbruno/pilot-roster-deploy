@@ -42,6 +42,11 @@ service cloud.firestore {
         allow read: if isPilot(pilotId) || ownUserDoc(familyUid);
         allow create, update, delete: if isPilot(pilotId);
       }
+
+      match /familyInvites/{inviteId} {
+        allow read: if isPilot(pilotId);
+        allow create, update, delete: if isPilot(pilotId);
+      }
     }
   }
 }
