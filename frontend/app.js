@@ -638,42 +638,60 @@ function setSyncState(mode, message = "", source = "") {
   syncState.source = source;
 }
 
-function applyRosterPayload(payload, source = "") {
-  state.meta = { ...state.meta, ...(payload.meta || {}) };
-  state.duties = Array.isArray(payload.duties) ? payload.duties.map(normalizeDuty).filter(Boolean) : [];
+function dutyMonths(duties) {
+  return new Set(duties.map((duty) => duty.date?.slice(0, 7)).filter(Boolean));
+}
+
+function replaceDutiesForMonths(nextDuties) {
+  const months = dutyMonths(nextDuties);
+  state.duties = state.duties
+    .filter((duty) => !months.has(duty.date.slice(0, 7)))
+    .concat(nextDuties);
   sortDuties();
-  if (state.duties[0]) {
-    const [year, month] = state.duties[0].date.split("-").map(Number);
+}
+
+function applyRosterPayload(payload, source = "", options = {}) {
+  const { replaceAll = true, updateVisibleMonth = true } = options;
+  state.meta = { ...state.meta, ...(payload.meta || {}) };
+  const payloadDuties = Array.isArray(payload.duties) ? payload.duties.map(normalizeDuty).filter(Boolean) : [];
+  if (replaceAll) {
+    state.duties = payloadDuties;
+    sortDuties();
+  } else {
+    replaceDutiesForMonths(payloadDuties);
+  }
+  if (updateVisibleMonth && payloadDuties[0]) {
+    const [year, month] = payloadDuties[0].date.split("-").map(Number);
     state.visibleMonth = new Date(year, month - 1, 1);
   }
   if (source) syncState.source = source;
 }
 
-function savePublishedRosterCache(payload) {
+function savePublishedRosterCache(payload, month = monthKey(state.visibleMonth)) {
   try {
-    localStorage.setItem(publishedRosterCacheKey(), JSON.stringify(payload));
+    localStorage.setItem(publishedRosterCacheKey(month), JSON.stringify(payload));
   } catch (error) {
     console.error(error);
   }
 }
 
-function loadPublishedRosterCache() {
-  const stored = localStorage.getItem(publishedRosterCacheKey());
+function loadPublishedRosterCache(month = monthKey(state.visibleMonth)) {
+  const stored = localStorage.getItem(publishedRosterCacheKey(month));
   if (!stored) return false;
   try {
     const payload = JSON.parse(stored);
-    applyRosterPayload(payload, "cache");
+    applyRosterPayload(payload, "cache", { replaceAll: false, updateVisibleMonth: false });
     return true;
   } catch {
-    localStorage.removeItem(PUBLISHED_ROSTER_KEY);
+    localStorage.removeItem(publishedRosterCacheKey(month));
     return false;
   }
 }
 
-function publishedRosterCacheKey() {
+function publishedRosterCacheKey(month = monthKey(state.visibleMonth)) {
   return firebaseState.targetPilotId
-    ? `${PUBLISHED_ROSTER_KEY}-${firebaseState.targetPilotId}`
-    : PUBLISHED_ROSTER_KEY;
+    ? `${PUBLISHED_ROSTER_KEY}-${firebaseState.targetPilotId}-${month}`
+    : `${PUBLISHED_ROSTER_KEY}-${month}`;
 }
 
 function saveLocal() {
@@ -924,17 +942,18 @@ async function loadFirebaseSession(user) {
 
   await claimPendingFamilyAccess();
   setMode("family");
-  await loadPublishedRoster();
+  await loadPublishedRoster({ useActiveMonth: true });
 }
 
-async function loadFirebasePilotProfile(pilotId) {
+async function loadFirebasePilotProfile(pilotId, options = {}) {
+  const { updateVisibleMonth = true } = options;
   if (!pilotId) return null;
   const snapshot = await firebaseState.db.collection("pilots").doc(pilotId).get();
   const profile = snapshot.exists ? snapshot.data() : {};
   firebaseState.pilotProfile = profile;
   state.meta.pilotName = profile.displayName || firebaseState.profile?.name || state.meta.pilotName;
   state.meta.familyNote = profile.familyNote || state.meta.familyNote;
-  if (profile.activeRosterMonth) {
+  if (updateVisibleMonth && profile.activeRosterMonth) {
     const [year, month] = profile.activeRosterMonth.split("-").map(Number);
     state.visibleMonth = new Date(year, month - 1, 1);
   }
@@ -1051,9 +1070,10 @@ function syncMetaFromInputs() {
 }
 
 function renderSummary() {
-  els.offDays.textContent = String(state.duties.filter((duty) => typeToClass(duty.type) === "off").length);
-  els.reserveDays.textContent = String(state.duties.filter((duty) => typeToClass(duty.type) === "reserve").length);
-  els.standbyDays.textContent = String(state.duties.filter((duty) => typeToClass(duty.type) === "standby").length);
+  const monthDuties = dutiesForMonth();
+  els.offDays.textContent = String(monthDuties.filter((duty) => typeToClass(duty.type) === "off").length);
+  els.reserveDays.textContent = String(monthDuties.filter((duty) => typeToClass(duty.type) === "reserve").length);
+  els.standbyDays.textContent = String(monthDuties.filter((duty) => typeToClass(duty.type) === "standby").length);
   els.inactiveDays.textContent = String(inactiveDatesForMonth().length);
   els.updatedAt.textContent = new Intl.DateTimeFormat("pt-BR", {
     day: "2-digit",
@@ -1223,11 +1243,10 @@ function importDuties(text, source = "texto") {
     setImportStatus("Nao encontrei itens validos. O PDF precisa conter texto selecionavel com datas, horarios, aeroportos ou tipo de programação.", "error");
     return;
   }
-  state.duties = imported;
   state.meta.updatedAt = new Date().toISOString();
   const [year, month] = imported[0].date.split("-").map(Number);
   state.visibleMonth = new Date(year, month - 1, 1);
-  sortDuties();
+  replaceDutiesForMonths(imported);
   saveLocal();
   render();
   setImportStatus(`${imported.length} item(ns) importado(s) de ${source}. Revise a lista antes de compartilhar.`, "ok");
@@ -1243,13 +1262,17 @@ function addDuty(duty) {
 
 function shiftMonth(amount) {
   state.visibleMonth = new Date(state.visibleMonth.getFullYear(), state.visibleMonth.getMonth() + amount, 1);
+  if (firebaseEnabled()) loadPublishedRosterCache();
   render();
+  if (firebaseEnabled()) loadPublishedRoster({ useActiveMonth: false });
 }
 
 function goToToday() {
   const today = new Date();
   state.visibleMonth = new Date(today.getFullYear(), today.getMonth(), 1);
+  if (firebaseEnabled()) loadPublishedRosterCache();
   render();
+  if (firebaseEnabled()) loadPublishedRoster({ useActiveMonth: false });
   requestAnimationFrame(() => {
     const todayCard = document.querySelector(`.day[data-date="${todayKey()}"]`);
     if (todayCard) todayCard.scrollIntoView({ behavior: "smooth", block: "center" });
@@ -1272,8 +1295,8 @@ function registerServiceWorker() {
   });
 }
 
-async function loadPublishedRoster() {
-  if (firebaseEnabled()) return loadFirebaseRoster();
+async function loadPublishedRoster(options = {}) {
+  if (firebaseEnabled()) return loadFirebaseRoster(options);
   if (!CONFIGURED_API_URL && !(window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1")) {
     return false;
   }
@@ -1323,7 +1346,8 @@ async function loadPublishedRoster() {
   }
 }
 
-async function loadFirebaseRoster() {
+async function loadFirebaseRoster(options = {}) {
+  const { useActiveMonth = false } = options;
   if (!firebaseState.user) return false;
   const pilotId = firebaseState.targetPilotId;
   if (!pilotId) {
@@ -1338,8 +1362,8 @@ async function loadFirebaseRoster() {
       setSyncState("syncing", "Sincronizando escala...", syncState.source || "");
       render();
     }
-    const pilotProfile = await loadFirebasePilotProfile(pilotId);
-    const rosterMonth = pilotProfile?.activeRosterMonth || monthKey(state.visibleMonth);
+    await loadFirebasePilotProfile(pilotId, { updateVisibleMonth: useActiveMonth });
+    const rosterMonth = monthKey(state.visibleMonth);
     const snapshot = await firebaseState.db
       .collection("pilots")
       .doc(pilotId)
@@ -1348,18 +1372,18 @@ async function loadFirebaseRoster() {
       .get();
 
     if (!snapshot.exists) {
-      state.duties = [];
-      setSyncState("idle", "Nenhuma escala publicada para este piloto.", "");
+      state.duties = state.duties.filter((duty) => !duty.date.startsWith(rosterMonth));
+      setSyncState("idle", "Nenhuma escala publicada para este mês.", "");
       render();
       return false;
     }
 
     const previousUpdatedAt = state.meta.updatedAt || "";
-    applyRosterPayload(snapshot.data(), "network");
+    applyRosterPayload(snapshot.data(), "network", { replaceAll: false, updateVisibleMonth: false });
     savePublishedRosterCache({
       meta: state.meta,
-      duties: state.duties,
-    });
+      duties: dutiesForMonth(),
+    }, rosterMonth);
     if (state.mode === "family") {
       setSyncState(
         "ready",
@@ -1419,7 +1443,11 @@ async function publishFirebaseRoster() {
   }
 
   syncMetaFromInputs();
-  const rosterMonth = state.duties[0]?.date?.slice(0, 7) || monthKey(state.visibleMonth);
+  const rosterMonth = monthKey(state.visibleMonth);
+  const monthDuties = dutiesForMonth();
+  if (!monthDuties.length) {
+    throw new Error("Nao ha itens neste mês para publicar.");
+  }
   state.meta.updatedAt = new Date().toISOString();
   const payload = {
     meta: {
@@ -1428,7 +1456,7 @@ async function publishFirebaseRoster() {
       familyNote: els.familyNote.value.trim(),
       updatedAt: state.meta.updatedAt,
     },
-    duties: state.duties,
+    duties: monthDuties,
     publishedBy: firebaseState.user.uid,
     updatedAt: state.meta.updatedAt,
   };
@@ -1446,10 +1474,10 @@ async function publishFirebaseRoster() {
   savePublishedRosterCache({
     meta: payload.meta,
     duties: payload.duties,
-  });
+  }, rosterMonth);
   saveLocal();
   render();
-  return { ok: true, count: state.duties.length, updatedAt: state.meta.updatedAt };
+  return { ok: true, count: monthDuties.length, updatedAt: state.meta.updatedAt };
 }
 
 async function extractPdfText(file) {
