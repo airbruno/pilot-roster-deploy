@@ -511,7 +511,9 @@ function compactActivityCode(line) {
 }
 
 function iflightNeoEventCode(line) {
-  const body = compactRosterBody(line).replace(/^(?:(?:[01]?\d|2[0-3]):[0-5]\d)+/, "");
+  const body = compactRosterBody(line)
+    .replace(/^(?:DOM|SEG|TER|QUA|QUI|SEX|SAB|SUN|MON|TUE|WED|THU|FRI|SAT)/, "")
+    .replace(/^(?:(?:[01]?\d|2[0-3]):[0-5]\d)+/, "");
   for (const code of iflightNeoCodes) {
     if (iflightPreservedCodes.has(code)) continue;
     if (!body.startsWith(code)) continue;
