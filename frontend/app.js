@@ -43,6 +43,8 @@ const els = {
   familyAccessEmail: document.querySelector("#familyAccessEmail"),
   grantFamilyButton: document.querySelector("#grantFamilyButton"),
   familyAccessList: document.querySelector("#familyAccessList"),
+  loadingOverlay: document.querySelector("#loadingOverlay"),
+  loadingMessage: document.querySelector("#loadingMessage"),
 };
 
 const STORAGE_KEY = "pilot-family-schedule-v1";
@@ -58,6 +60,10 @@ const syncState = {
   mode: "idle",
   source: "",
   message: "",
+};
+const loadingState = {
+  depth: 0,
+  message: "Carregando...",
 };
 const firebaseState = {
   app: null,
@@ -638,6 +644,27 @@ function setSyncState(mode, message = "", source = "") {
   syncState.source = source;
 }
 
+function showLoading(message = "Carregando...") {
+  loadingState.depth += 1;
+  loadingState.message = message;
+  if (els.loadingMessage) els.loadingMessage.textContent = message;
+  if (els.loadingOverlay) els.loadingOverlay.hidden = false;
+}
+
+function hideLoading() {
+  loadingState.depth = Math.max(0, loadingState.depth - 1);
+  if (loadingState.depth === 0 && els.loadingOverlay) els.loadingOverlay.hidden = true;
+}
+
+async function withLoading(message, task) {
+  showLoading(message);
+  try {
+    return await task();
+  } finally {
+    hideLoading();
+  }
+}
+
 function dutyMonths(duties) {
   return new Set(duties.map((duty) => duty.date?.slice(0, 7)).filter(Boolean));
 }
@@ -858,6 +885,7 @@ async function authenticateFirebase(createAccount = false) {
   }
 
   try {
+    showLoading(createAccount ? "Criando acesso..." : "Entrando...");
     if (els.loginError) els.loginError.classList.remove("visible");
     if (createAccount) {
       const credential = await firebaseState.auth.createUserWithEmailAndPassword(email, password);
@@ -873,6 +901,8 @@ async function authenticateFirebase(createAccount = false) {
       els.loginError.classList.add("visible");
     }
     return false;
+  } finally {
+    hideLoading();
   }
 }
 
@@ -1261,22 +1291,36 @@ function addDuty(duty) {
 }
 
 function shiftMonth(amount) {
+  const shouldLoad = firebaseEnabled();
+  if (shouldLoad) showLoading("Carregando escala...");
   state.visibleMonth = new Date(state.visibleMonth.getFullYear(), state.visibleMonth.getMonth() + amount, 1);
   if (firebaseEnabled()) loadPublishedRosterCache();
   render();
-  if (firebaseEnabled()) loadPublishedRoster({ useActiveMonth: false });
+  if (shouldLoad) {
+    loadPublishedRoster({ useActiveMonth: false, showLoading: false }).finally(hideLoading);
+  }
 }
 
 function goToToday() {
+  const shouldLoad = firebaseEnabled();
+  if (shouldLoad) showLoading("Carregando escala...");
   const today = new Date();
   state.visibleMonth = new Date(today.getFullYear(), today.getMonth(), 1);
   if (firebaseEnabled()) loadPublishedRosterCache();
   render();
-  if (firebaseEnabled()) loadPublishedRoster({ useActiveMonth: false });
-  requestAnimationFrame(() => {
+  const scrollToToday = () => requestAnimationFrame(() => {
     const todayCard = document.querySelector(`.day[data-date="${todayKey()}"]`);
     if (todayCard) todayCard.scrollIntoView({ behavior: "smooth", block: "center" });
   });
+  if (shouldLoad) {
+    loadPublishedRoster({ useActiveMonth: false, showLoading: false })
+      .finally(() => {
+        hideLoading();
+        scrollToToday();
+      });
+  } else {
+    scrollToToday();
+  }
 }
 
 function apiBaseUrl() {
@@ -1297,9 +1341,11 @@ function registerServiceWorker() {
 
 async function loadPublishedRoster(options = {}) {
   if (firebaseEnabled()) return loadFirebaseRoster(options);
+  const { showLoading: shouldShowLoading = true } = options;
   if (!CONFIGURED_API_URL && !(window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1")) {
     return false;
   }
+  if (shouldShowLoading) showLoading("Carregando escala...");
   try {
     if (state.mode === "family") {
       setSyncState("syncing", "Sincronizando escala...", syncState.source || "");
@@ -1343,17 +1389,21 @@ async function loadPublishedRoster(options = {}) {
       render();
     }
     return false;
+  } finally {
+    if (shouldShowLoading) hideLoading();
   }
 }
 
 async function loadFirebaseRoster(options = {}) {
-  const { useActiveMonth = false } = options;
+  const { useActiveMonth = false, showLoading: shouldShowLoading = true } = options;
   if (!firebaseState.user) return false;
+  if (shouldShowLoading) showLoading("Carregando escala...");
   const pilotId = firebaseState.targetPilotId;
   if (!pilotId) {
     setSyncState("idle", "Nenhum piloto vinculado a esta conta.", "");
     state.duties = [];
     render();
+    if (shouldShowLoading) hideLoading();
     return false;
   }
 
@@ -1406,6 +1456,8 @@ async function loadFirebaseRoster(options = {}) {
     );
     render();
     return false;
+  } finally {
+    if (shouldShowLoading) hideLoading();
   }
 }
 
@@ -1601,10 +1653,11 @@ function bindEvents() {
       const isPdf = file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf");
       if (isPdf) {
         setImportStatus("Extraindo texto do PDF...", "busy");
-        const payload = await extractPdfText(file);
+        const payload = await withLoading("Lendo PDF...", () => extractPdfText(file));
         importDuties(payload.text, `PDF (${payload.pages} pagina(s))`);
       } else {
-        importDuties(await file.text(), file.name);
+        const text = await withLoading("Lendo arquivo...", () => file.text());
+        importDuties(text, file.name);
       }
     } catch (error) {
       setImportStatus(error.message || "Falha ao importar arquivo.", "error");
@@ -1615,7 +1668,7 @@ function bindEvents() {
   els.publishButton?.addEventListener("click", async () => {
     try {
       setImportStatus("Publicando escala...", "busy");
-      const payload = await publishRoster();
+      const payload = await withLoading("Publicando escala...", publishRoster);
       setImportStatus(`${payload.count || state.duties.length} item(ns) publicado(s).`, "ok");
     } catch (error) {
       setImportStatus(error.message || "Falha ao publicar escala.", "error");
@@ -1624,7 +1677,7 @@ function bindEvents() {
   els.grantFamilyButton?.addEventListener("click", async () => {
     try {
       setImportStatus("Liberando acesso...", "busy");
-      const result = await grantFamilyAccess();
+      const result = await withLoading("Liberando acesso...", grantFamilyAccess);
       const message = result.status === "pending"
         ? "Email liberado. O acesso sera ativado quando o familiar criar conta com esse email."
         : "Acesso liberado para o familiar.";
@@ -1638,10 +1691,10 @@ function bindEvents() {
     if (!button) return;
     try {
       setImportStatus("Removendo acesso...", "busy");
-      await revokeFamilyAccess({
+      await withLoading("Removendo acesso...", () => revokeFamilyAccess({
         email: button.dataset.email || "",
         familyUid: button.dataset.familyUid || "",
-      });
+      }));
       setImportStatus("Acesso removido.", "ok");
     } catch (error) {
       setImportStatus(firebaseErrorMessage(error), "error");
@@ -1667,7 +1720,7 @@ function init() {
   if (firebaseEnabled() && !shared) {
     setPilotLocked(true);
     firebaseState.auth.onAuthStateChanged((user) => {
-      loadFirebaseSession(user).catch((error) => {
+      withLoading("Carregando acesso...", () => loadFirebaseSession(user)).catch((error) => {
         console.error(error);
         if (els.loginError) {
           els.loginError.textContent = firebaseErrorMessage(error);
