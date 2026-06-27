@@ -141,7 +141,8 @@ const typeClass = {
   programacao: "event",
 };
 const iflightNeoTagGroups = [
-  { label: "Folga", codes: ["OFF", "DO", "DB", "DBC", "DC", "DCH", "DE", "DF", "DH", "DMO", "DOB", "DOBI", "DOM", "DOP", "DOPR", "DR", "DRC", "DS", "DU", "DW"] },
+  { label: "Folga", codes: ["OFF", "DO", "DB", "DBC", "DC", "DCH", "DE", "DF", "DH", "DMO", "DOB", "DOBI", "DOM", "DOP", "DOPR", "DRC", "DS", "DU", "DW"] },
+  { label: "Folga pedida", codes: ["DR"] },
   { label: "Férias", codes: ["VC"] },
   { label: "Licença", codes: ["CAF", "DSVD", "FTG", "LEP", "LFS", "LNP", "LSNA", "SAED", "SAER"] },
   { label: "Dispensa médica", codes: ["INSS", "JIS", "SICA", "SICK", "SW"] },
