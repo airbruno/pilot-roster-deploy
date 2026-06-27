@@ -557,6 +557,11 @@ body.pilot-locked .today-fab {
   background: #7056d9;
 }
 
+.badge.event,
+.item-type.event {
+  background: #64748b;
+}
+
 .badge.off,
 .item-type.off {
   background: var(--green);
@@ -694,6 +699,10 @@ body.pilot-locked .today-fab {
 
 .mini-duty.training {
   border-left-color: #7056d9;
+}
+
+.mini-duty.event {
+  border-left-color: #64748b;
 }
 
 .item-type {

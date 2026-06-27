@@ -117,11 +117,58 @@ const typeClass = {
   standby: "standby",
   treinamento: "training",
   training: "training",
+  simulador: "training",
+  "treinamento online": "training",
   folga: "off",
   off: "off",
+  ferias: "off",
+  licenca: "off",
+  "dispensa medica": "off",
+  afastamento: "off",
+  inativo: "off",
   sobreaviso: "standby",
   "stand by": "standby",
+  administrativo: "event",
+  operacional: "event",
+  deslocamento: "event",
+  documento: "event",
+  "exame medico": "event",
+  ausencia: "event",
+  atraso: "event",
+  suspensao: "event",
+  troca: "event",
+  "fora de escala": "event",
+  programacao: "event",
 };
+const iflightNeoTagGroups = [
+  { label: "Folga", codes: ["OFF", "DO", "DB", "DBC", "DC", "DCH", "DE", "DF", "DH", "DMO", "DOB", "DOBI", "DOM", "DOP", "DOPR", "DR", "DRC", "DS", "DU", "DW"] },
+  { label: "Férias", codes: ["VC"] },
+  { label: "Licença", codes: ["CAF", "DSVD", "FTG", "LEP", "LFS", "LNP", "LSNA", "SAED", "SAER"] },
+  { label: "Dispensa médica", codes: ["INSS", "JIS", "SICA", "SICK", "SW"] },
+  { label: "Treinamento", codes: ["A319", "A320", "A32I", "A350", "ACF", "APE", "AQP", "B767", "B777", "C32F", "C350", "C767", "C777", "CAT", "CFI", "CHK", "CPER", "CRM", "CRMT", "DEA", "DNI", "DTRN", "EMG", "ENS", "EQP", "FCH", "FCI", "FCN", "FUEL", "GPS", "I320", "I350", "I763", "I777", "ICFI", "ICRM", "IFR", "ITAI", "LID", "M320", "M350", "M767", "M777", "MAR", "MCK", "MET", "NEO2", "PBN", "PID", "PRA", "PSO", "R320", "R350", "R767", "R777", "RCFI", "REG", "REXP", "RP32", "RP35", "RPB6", "RPB7", "RTAI", "S320", "SAFE", "SEC", "SEG", "SER", "TAI", "TEOP", "TRH", "TRNG", "TRTO", "TST"] },
+  { label: "Treinamento online", codes: ["ONTR", "SGSO", "WEB", "WEB1", "WEB2", "WEB3", "WEB4", "WEB5"] },
+  { label: "Simulador", codes: ["AVL_JJ", "CATS_JJ", "EXT_JJ", "LOFT_JJ", "PBNS_JJ", "REC_JJ", "RNP_JJ", "SIM_JJ"] },
+  { label: "Administrativo", codes: ["ADM", "CEQ", "CH", "MT", "OPCT", "OPR", "OPT", "PSNA", "SFTY"] },
+  { label: "Operacional", codes: ["APR", "BUS", "CDM", "LOSA", "OWC", "OWN", "REP"] },
+  { label: "Deslocamento", codes: ["DCGH", "DGRU", "TEMP"] },
+  { label: "Documento", codes: ["CMA", "PASS", "VUSA", "WCCF", "WCHT"] },
+  { label: "Exame médico", codes: ["ME"] },
+  { label: "Ausência", codes: ["FMF", "JI", "JIJ", "LCH", "NS", "NSC", "NSJ", "NSP", "NSS"] },
+  { label: "Atraso", codes: ["ATZ", "ATZJ"] },
+  { label: "Inativo", codes: ["PCMA"] },
+  { label: "Suspensão", codes: ["SUSP"] },
+  { label: "Troca", codes: ["SWAP"] },
+  { label: "Fora de escala", codes: ["OUT"] },
+  { label: "Reserva", codes: ["ASB1", "ASB2"] },
+];
+const iflightNeoTags = iflightNeoTagGroups.reduce((acc, group) => {
+  group.codes.forEach((code) => {
+    acc[code] = group.label;
+  });
+  return acc;
+}, {});
+const iflightNeoCodes = Object.keys(iflightNeoTags).sort((a, b) => b.length - a.length);
+const iflightPreservedCodes = new Set(["ASB", "HSB", "HSBE", "DO"]);
 
 function firebaseConfigReady() {
   return Boolean(FIREBASE_CONFIG.apiKey && FIREBASE_CONFIG.projectId && window.firebase);
@@ -249,7 +296,7 @@ function renderDutyLine(duty) {
       </div>
     `;
   }
-  if (["reserve", "standby", "off", "training"].includes(dutyClass)) {
+  if (["reserve", "standby", "off", "training", "event"].includes(dutyClass)) {
     return renderActivityBlock(duty, dutyClass, time);
   }
   return `<div class="mini-duty ${dutyClass}">${escapeHtml(time)} ${escapeHtml(dutyPlaceLabel(duty))}</div>`;
@@ -462,11 +509,31 @@ function compactActivityCode(line) {
   return activity ? activity[1] : "";
 }
 
-function inferType(line, hasRouteOrFlight) {
+function iflightNeoEventCode(line) {
+  const body = compactRosterBody(line).replace(/^(?:(?:[01]?\d|2[0-3]):[0-5]\d)+/, "");
+  for (const code of iflightNeoCodes) {
+    if (iflightPreservedCodes.has(code)) continue;
+    if (!body.startsWith(code)) continue;
+    const rest = body.slice(code.length);
+    if (!rest) return code;
+    if (/^[-/]/.test(rest)) return code;
+    if (/^(?:FDT|FO|CA|CAPT|SEN|OP|DH|PS)/.test(rest)) return code;
+    if (/^(?:[01]?\d|2[0-3]):[0-5]\d/.test(rest)) return code;
+    if (/^[A-Z]{3}(?=$|(?:[01]?\d|2[0-3]):[0-5]\d|FDT|FO|CA|CAPT|SEN|OP|DH|PS)/.test(rest)) return code;
+  }
+  return "";
+}
+
+function isIflightNeoCode(code) {
+  return Boolean(iflightNeoTags[code]);
+}
+
+function inferType(line, hasRouteOrFlight, neoCode = "") {
   const compactCode = compactActivityCode(line);
   if (compactCode === "ASB") return "Reserva";
   if (compactCode === "HSB" || compactCode === "HSBE") return "Sobreaviso";
   if (compactCode === "DO") return "Folga";
+  if (neoCode && iflightNeoTags[neoCode]) return iflightNeoTags[neoCode];
 
   const normalized = normalizeText(line);
   if (/(^|[^a-z])(folga|day off|off|do)(?=[^a-z]|\d|$)/.test(normalized)) return "Folga";
@@ -509,6 +576,7 @@ function parsePlainScheduleText(text) {
       duties.push(compactFlightDuty);
       continue;
     }
+    const neoCode = iflightNeoEventCode(line);
 
     const rosterFlight = line.toUpperCase().match(/\b([A-Z]{2}\s?\d{3,5})\s+(?:(?:FDT|FO|CA|CAPT|SEN)\s+)?(?:(?:OP|DH)\s+)?([A-Z]{3})\s+((?:[01]?\d|2[0-3]):[0-5]\d)\s+([A-Z]{3})\s+((?:[01]?\d|2[0-3]):[0-5]\d)\b/);
     if (rosterFlight) {
@@ -531,20 +599,21 @@ function parsePlainScheduleText(text) {
 
     const airportMatches = [...line.toUpperCase().matchAll(/\b[A-Z]{3}\b/g)]
       .map((match) => match[0])
-      .filter((code) => !["PDF", "UTC", "DOM", "SEG", "TER", "QUA", "QUI", "SEX", "SAB", "JAN", "FEV", "MAR", "ABR", "MAI", "JUN", "JUL", "AGO", "SET", "OUT", "NOV", "DEZ", "ASB", "HSB"].includes(code));
+      .filter((code) => !["PDF", "UTC", "DOM", "SEG", "TER", "QUA", "QUI", "SEX", "SAB", "JAN", "FEV", "MAR", "ABR", "MAI", "JUN", "JUL", "AGO", "SET", "OUT", "NOV", "DEZ", "ASB", "HSB"].includes(code))
+      .filter((code) => !isIflightNeoCode(code));
     if (!airportMatches.length) {
       const base = compactActivityBase(line);
       if (base) airportMatches.push(base);
     }
     const flightMatch = line.toUpperCase().match(/\b[A-Z]{2}\s?\d{3,5}\b/);
-    const hasKeyword = /(^|[^A-Z])(voo|flight|folga|reserva|standby|treinamento|simulador|curso|posicionamento|deadhead|pernoite|DO|ASB|HSB|HSBE)(?=[^A-Z]|\d|$)/i.test(line) || Boolean(compactActivityCode(line));
+    const hasKeyword = /(^|[^A-Z])(voo|flight|folga|reserva|standby|treinamento|simulador|curso|posicionamento|deadhead|pernoite|DO|ASB|HSB|HSBE)(?=[^A-Z]|\d|$)/i.test(line) || Boolean(compactActivityCode(line)) || Boolean(neoCode);
     const hasRouteOrFlight = airportMatches.length >= 2 || Boolean(flightMatch);
 
     if (!lineDate && !hasKeyword && !hasRouteOrFlight) continue;
-    if (!timeMatches.length && !hasRouteOrFlight) continue;
+    if (!timeMatches.length && !hasRouteOrFlight && !neoCode) continue;
     if (!hasKeyword && !hasRouteOrFlight && timeMatches.length < 2) continue;
 
-    const type = inferType(line, hasRouteOrFlight);
+    const type = inferType(line, hasRouteOrFlight, neoCode);
     const timedActivity = ["Reserva", "Sobreaviso", "Folga"].includes(type);
     const hasReport = ["Reserva", "Sobreaviso"].includes(type);
     const activityEnd = timedActivity ? findActivityEnd(timeMatches) : "";
