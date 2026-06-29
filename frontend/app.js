@@ -171,6 +171,7 @@ const iflightNeoTags = iflightNeoTagGroups.reduce((acc, group) => {
 }, {});
 const iflightNeoCodes = Object.keys(iflightNeoTags).sort((a, b) => b.length - a.length);
 const iflightPreservedCodes = new Set(["ASB", "HSB", "HSBE", "DO"]);
+const JOURNEY_SPLIT_GAP_MINUTES = 6 * 60;
 
 function firebaseConfigReady() {
   return Boolean(FIREBASE_CONFIG.apiKey && FIREBASE_CONFIG.projectId && window.firebase);
@@ -271,6 +272,13 @@ function isNextDayTime(start, end) {
   return startMinutes !== null && endMinutes !== null && endMinutes < startMinutes;
 }
 
+function elapsedMinutesBetween(start, end) {
+  const startMinutes = minutesFromTime(start);
+  const endMinutes = minutesFromTime(end);
+  if (startMinutes === null || endMinutes === null) return null;
+  return endMinutes >= startMinutes ? endMinutes - startMinutes : (24 * 60) - startMinutes + endMinutes;
+}
+
 function formatTimeWithDayShift(time, referenceTime) {
   if (!time) return "";
   return isNextDayTime(referenceTime, time) ? `${time} (+1)` : time;
@@ -333,8 +341,7 @@ function splitDayDutiesIntoJourneyBlocks(dayDuties) {
       return;
     }
 
-    const currentJourneyEnded = currentFlightBlock?.duties.some((currentDuty) => currentDuty.dutyEnd);
-    if (!currentFlightBlock || (duty.reportTime && currentJourneyEnded)) {
+    if (!currentFlightBlock || shouldStartNewJourney(currentFlightBlock, duty)) {
       currentFlightBlock = { type: "flight", duties: [] };
       blocks.push(currentFlightBlock);
     }
@@ -342,6 +349,17 @@ function splitDayDutiesIntoJourneyBlocks(dayDuties) {
   });
 
   return blocks;
+}
+
+function shouldStartNewJourney(currentFlightBlock, duty) {
+  if (!duty.reportTime) return false;
+  const previousDuty = currentFlightBlock?.duties.at(-1);
+  if (!previousDuty) return true;
+  const previousEnd = previousDuty.dutyEnd || previousDuty.end;
+  if (!previousEnd) return false;
+  const nextStart = duty.reportTime || duty.start;
+  const gap = elapsedMinutesBetween(previousEnd, nextStart);
+  return gap === null || gap >= JOURNEY_SPLIT_GAP_MINUTES;
 }
 
 function formatJourneyDutyEnd(duties) {
