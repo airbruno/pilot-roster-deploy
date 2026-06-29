@@ -8,7 +8,6 @@ Aplicativo PWA para pilotos publicarem escala mensal e familiares visualizarem a
 frontend/           Firebase Hosting
 functions/          Cloud Functions
 firestore.rules     Regras de acesso Auth + Firestore
-backend/            Backend Render legado, mantido temporariamente como fallback
 ```
 
 ## Serviços usados
@@ -59,7 +58,6 @@ Exemplo:
 
 ```js
 window.APP_CONFIG = {
-  API_URL: "",
   FUNCTIONS_REGION: "us-central1",
   FIREBASE: {
     apiKey: "...",
@@ -82,8 +80,10 @@ window.APP_CONFIG = {
 
 ```bash
 npm run check:static
+npm run check:parser
+npm run check:journeys
 npm run check:functions
-npm run check:backend
+npm run check:visual
 ```
 
 ## Deploy Firebase
@@ -102,7 +102,6 @@ firebase deploy
 
 ## Notas
 
-- O backend Python em `backend/` permanece como fallback legado para o deploy antigo Render/Vercel.
-- Com `APP_CONFIG.FIREBASE` preenchido, o frontend usa Auth, Firestore e Functions.
-- Sem `APP_CONFIG.FIREBASE`, o app continua no modo legado com API Render.
+- O app usa somente Firebase Hosting, Authentication, Firestore e Cloud Functions.
+- Sem `APP_CONFIG.FIREBASE`, importação de PDF, publicação e sincronização remota ficam indisponíveis.
 - PDFs escaneados como imagem ainda precisam de OCR; a Function atual extrai texto de PDFs com texto selecionável.

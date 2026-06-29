@@ -42,6 +42,7 @@ const els = {
   familyAccessList: document.querySelector("#familyAccessList"),
   loadingOverlay: document.querySelector("#loadingOverlay"),
   loadingMessage: document.querySelector("#loadingMessage"),
+  updateAppButton: document.querySelector("#updateAppButton"),
 };
 
 const STORAGE_KEY = "pilot-family-schedule-v1";
@@ -49,8 +50,6 @@ const PUBLISHED_ROSTER_KEY = "pilot-family-published-v1";
 const PILOT_TOKEN_KEY = "pilot-roster-token";
 const PILOT_SESSION_KEY = "pilot-roster-session";
 const LOCAL_PILOT_TOKEN = "test-token";
-const LOCAL_API_URL = "http://localhost:4174";
-const CONFIGURED_API_URL = window.APP_CONFIG?.API_URL ? String(window.APP_CONFIG.API_URL).replace(/\/+$/, "") : "";
 const FIREBASE_CONFIG = window.APP_CONFIG?.FIREBASE || {};
 const FUNCTIONS_REGION = window.APP_CONFIG?.FUNCTIONS_REGION || "us-central1";
 const syncState = {
@@ -391,15 +390,17 @@ function formatJourneyDutyEnd(duties) {
   return formatTimeWithDayShift(dutyEnd, reference);
 }
 
-function renderJourneyBlock(block) {
+function renderJourneyBlock(block, index = 0, total = 1) {
   if (block.type !== "flight") return block.duties.map(renderDutyLine).join("");
 
+  const heading = total > 1 ? `<div class="journey-heading">Jornada ${index + 1}</div>` : "";
   const reportDuty = block.duties.find((duty) => duty.reportTime);
   const report = reportDuty ? `<div class="mini-report journey-report">Apresentação: ${escapeHtml(reportDuty.reportTime)}</div>` : "";
   const dutyEnd = formatJourneyDutyEnd(block.duties);
   const dutyEndLine = dutyEnd ? `<div class="mini-report journey-end">Fim da jornada: ${escapeHtml(dutyEnd)}</div>` : "";
   return `
     <div class="journey-block">
+      ${heading}
       ${report}
       ${block.duties.map(renderDutyLine).join("")}
       ${dutyEndLine}
@@ -999,19 +1000,7 @@ async function validatePilotToken(token) {
   const normalized = String(token || "").trim();
   if (!normalized) return false;
   if (isLocalHost()) return normalized === LOCAL_PILOT_TOKEN;
-
-  try {
-    const response = await fetch(`${apiBaseUrl()}/api/auth/pilot`, {
-      method: "POST",
-      headers: {
-        "X-Pilot-Token": normalized,
-      },
-    });
-    return response.ok;
-  } catch (error) {
-    console.error(error);
-    throw new Error("Nao foi possivel validar o token agora.");
-  }
+  throw new Error("Firebase nao esta configurado neste ambiente.");
 }
 
 async function unlockPilot(token) {
@@ -1410,7 +1399,7 @@ function renderCalendar() {
       : inactive
         ? `<span class="badge flight">Voo</span>`
         : "";
-    const duties = dayDuties.length ? splitDayDutiesIntoJourneyBlocks(dayDuties).map(renderJourneyBlock).join("") : inactive
+    const duties = dayDuties.length ? splitDayDutiesIntoJourneyBlocks(dayDuties).map((block, index, blocks) => renderJourneyBlock(block, index, blocks.length)).join("") : inactive
       ? `<div class="mini-duty flight inactive-duty">${bedIcon()}<span>Inativo</span></div>`
       : `<div class="no-data">Sem dados</div>`;
     const weekdayName = formatWeekdayName(date);
@@ -1439,9 +1428,86 @@ function setImportStatus(message, tone = "busy") {
   els.importStatus.className = `import-status visible ${tone}`;
 }
 
+function setImportStatusHtml(markup, tone = "busy") {
+  els.importStatus.innerHTML = markup;
+  els.importStatus.className = `import-status visible ${tone}`;
+}
+
 function clearImportStatus() {
   els.importStatus.textContent = "";
   els.importStatus.className = "import-status";
+}
+
+function importedMonthLabel(imported) {
+  const months = [...dutyMonths(imported)].sort();
+  if (!months.length) return "";
+  if (months.length === 1) {
+    const [year, month] = months[0].split("-").map(Number);
+    return formatMonth(new Date(year, month - 1, 1));
+  }
+  return `${months.length} meses`;
+}
+
+function importSummary(imported) {
+  const counts = {
+    flight: 0,
+    off: 0,
+    reserve: 0,
+    standby: 0,
+    training: 0,
+    event: 0,
+  };
+  imported.forEach((duty) => {
+    const dutyClass = typeToClass(duty.type);
+    if (counts[dutyClass] !== undefined) counts[dutyClass] += 1;
+  });
+
+  const warnings = [];
+  const unknown = imported.filter((duty) => typeToClass(duty.type) === "event" && normalizeText(duty.type) === "programacao");
+  const incompleteFlights = imported.filter((duty) => typeToClass(duty.type) === "flight" && (!duty.from || !duty.to || !duty.start || !duty.end));
+  const overnightFlights = imported.filter((duty) => typeToClass(duty.type) === "flight" && minutesFromTime(duty.end) !== null && minutesFromTime(duty.start) !== null && minutesFromTime(duty.end) < minutesFromTime(duty.start));
+  const multiJourneyDays = [...new Set(imported
+    .filter((duty) => typeToClass(duty.type) === "flight")
+    .map((duty) => duty.date))]
+    .filter((date) => splitDayDutiesIntoJourneyBlocks(imported.filter((duty) => duty.date === date)).filter((block) => block.type === "flight").length > 1);
+
+  if (unknown.length) warnings.push(`${unknown.length} item(ns) ficaram como Programação.`);
+  if (incompleteFlights.length) warnings.push(`${incompleteFlights.length} voo(s) precisam de origem, destino ou horário.`);
+  if (overnightFlights.length) warnings.push(`${overnightFlights.length} voo(s) cruzam a meia-noite.`);
+  if (multiJourneyDays.length) warnings.push(`${multiJourneyDays.length} dia(s) têm mais de uma jornada.`);
+
+  return {
+    month: importedMonthLabel(imported),
+    total: imported.length,
+    counts,
+    warnings,
+  };
+}
+
+function importSummaryMarkup(imported, source) {
+  const summary = importSummary(imported);
+  const countItems = [
+    ["Voos", summary.counts.flight],
+    ["Folgas", summary.counts.off],
+    ["Reservas", summary.counts.reserve],
+    ["Sobreavisos", summary.counts.standby],
+    ["Treinos", summary.counts.training],
+    ["Outros", summary.counts.event],
+  ].filter(([, count]) => count > 0);
+  const warnings = summary.warnings.length
+    ? `<ul class="import-warnings">${summary.warnings.map((warning) => `<li>${escapeHtml(warning)}</li>`).join("")}</ul>`
+    : `<p class="import-ok">Nenhum aviso automático encontrado.</p>`;
+
+  return `
+    <div class="import-summary">
+      <strong>${escapeHtml(summary.total)} item(ns) importado(s) de ${escapeHtml(source)}.</strong>
+      <span>${escapeHtml(summary.month || "Mês não identificado")} · revise e publique as mudanças.</span>
+      <div class="import-summary-grid">
+        ${countItems.map(([label, count]) => `<span><b>${escapeHtml(count)}</b>${escapeHtml(label)}</span>`).join("")}
+      </div>
+      ${warnings}
+    </div>
+  `;
 }
 
 function importDuties(text, source = "texto") {
@@ -1456,7 +1522,7 @@ function importDuties(text, source = "texto") {
   replaceDutiesForMonths(imported);
   saveLocal();
   render();
-  setImportStatus(`${imported.length} item(ns) importado(s) de ${source}. Revise a lista antes de compartilhar.`, "ok");
+  setImportStatusHtml(importSummaryMarkup(imported, source), "ok");
 }
 
 function addDuty(duty) {
@@ -1500,17 +1566,48 @@ function goToToday() {
   }
 }
 
-function apiBaseUrl() {
-  if (isLocalHost()) {
-    return window.location.origin;
-  }
-  return CONFIGURED_API_URL || LOCAL_API_URL;
+function showUpdateAppButton(registration) {
+  if (!els.updateAppButton) return;
+  els.updateAppButton.hidden = false;
+  els.updateAppButton.onclick = async () => {
+    els.updateAppButton.disabled = true;
+    els.updateAppButton.textContent = "Atualizando...";
+    try {
+      if (registration.waiting) {
+        registration.waiting.postMessage({ type: "SKIP_WAITING" });
+      } else {
+        await registration.update();
+        window.location.reload();
+      }
+    } catch {
+      window.location.reload();
+    }
+  };
+}
+
+function setupPwaUpdateFlow(registration) {
+  if (registration.waiting) showUpdateAppButton(registration);
+  registration.addEventListener("updatefound", () => {
+    const worker = registration.installing;
+    if (!worker) return;
+    worker.addEventListener("statechange", () => {
+      if (worker.state === "installed" && navigator.serviceWorker.controller) {
+        showUpdateAppButton(registration);
+      }
+    });
+  });
+  navigator.serviceWorker.addEventListener("controllerchange", () => {
+    window.location.reload();
+  }, { once: true });
 }
 
 function registerServiceWorker() {
   if (!("serviceWorker" in navigator)) return;
   window.addEventListener("load", () => {
-    navigator.serviceWorker.register("/service-worker.js").catch(() => {
+    navigator.serviceWorker.register("/service-worker.js").then((registration) => {
+      setupPwaUpdateFlow(registration);
+      registration.update().catch(() => {});
+    }).catch(() => {
       // Ignore registration failures on unsupported local environments.
     });
   });
@@ -1518,57 +1615,7 @@ function registerServiceWorker() {
 
 async function loadPublishedRoster(options = {}) {
   if (firebaseEnabled()) return loadFirebaseRoster(options);
-  const { showLoading: shouldShowLoading = true } = options;
-  if (!CONFIGURED_API_URL && !(window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1")) {
-    return false;
-  }
-  if (shouldShowLoading) showLoading("Carregando escala...");
-  try {
-    if (state.mode === "family") {
-      setSyncState("syncing", "Sincronizando escala...", syncState.source || "");
-      render();
-    }
-    const response = await fetch(`${apiBaseUrl()}/api/roster/public`);
-    const payload = await response.json().catch(() => ({}));
-    if (!response.ok) {
-      if (state.mode === "family") {
-        setSyncState("idle", "Nenhuma escala publicada ainda.", syncState.source || "");
-        render();
-      }
-      return false;
-    }
-    const previousUpdatedAt = state.meta.updatedAt || "";
-    applyRosterPayload(payload, "network");
-    savePublishedRosterCache({
-      meta: state.meta,
-      duties: state.duties,
-    });
-    if (state.mode === "family") {
-      setSyncState(
-        "ready",
-        previousUpdatedAt && previousUpdatedAt === state.meta.updatedAt
-          ? "Escala já estava atualizada neste aparelho."
-          : "Nova escala sincronizada neste aparelho.",
-        "network",
-      );
-    }
-    render();
-    return true;
-  } catch {
-    if (state.mode === "family") {
-      setSyncState(
-        navigator.onLine ? "error" : "offline",
-        navigator.onLine
-          ? "Nao foi possivel atualizar agora. Exibindo a última escala salva neste aparelho."
-          : "Offline. Exibindo a última escala salva neste aparelho.",
-        syncState.source || "cache",
-      );
-      render();
-    }
-    return false;
-  } finally {
-    if (shouldShowLoading) hideLoading();
-  }
+  return false;
 }
 
 async function loadFirebaseRoster(options = {}) {
@@ -1640,30 +1687,7 @@ async function loadFirebaseRoster(options = {}) {
 
 async function publishRoster() {
   if (firebaseEnabled()) return publishFirebaseRoster();
-  const token = localStorage.getItem(PILOT_TOKEN_KEY) || "";
-  if (!token) {
-    throw new Error("Token do piloto nao informado.");
-  }
-  syncMetaFromInputs();
-  const response = await fetch(`${apiBaseUrl()}/api/roster`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "X-Pilot-Token": token,
-    },
-    body: JSON.stringify({
-      meta: state.meta,
-      duties: state.duties,
-    }),
-  });
-  const payload = await response.json().catch(() => ({}));
-  if (!response.ok) {
-    throw new Error(payload.error || "Nao foi possivel publicar a escala.");
-  }
-  state.meta.updatedAt = payload.updatedAt || new Date().toISOString();
-  saveLocal();
-  render();
-  return payload;
+  throw new Error("Firebase nao esta configurado neste ambiente.");
 }
 
 async function publishFirebaseRoster() {
@@ -1709,22 +1733,7 @@ async function publishFirebaseRoster() {
 
 async function extractPdfText(file) {
   if (firebaseEnabled()) return extractPdfTextWithFirebase(file);
-  const endpoint = `${apiBaseUrl()}/api/extract-pdf?filename=${encodeURIComponent(file.name || "escala.pdf")}`;
-  try {
-    const response = await fetch(endpoint, {
-      method: "POST",
-      headers: { "Content-Type": "application/pdf" },
-      body: file,
-    });
-    const payload = await response.json().catch(() => ({}));
-    if (!response.ok) {
-      throw new Error(payload.error || "Nao foi possivel extrair texto do PDF.");
-    }
-    return payload;
-  } catch (error) {
-    if (!String(error.message || error).toLowerCase().includes("fetch")) throw error;
-    return extractPdfTextWithXHR(endpoint, file);
-  }
+  throw new Error("Firebase nao esta configurado para extrair PDF.");
 }
 
 async function extractPdfTextWithFirebase(file) {
@@ -1774,29 +1783,6 @@ async function revokeFamilyAccess({ email, familyUid }) {
   await callable({ email, familyUid });
   await loadFamilyAccessList();
   return true;
-}
-
-function extractPdfTextWithXHR(endpoint, file) {
-  return new Promise((resolve, reject) => {
-    const request = new XMLHttpRequest();
-    request.open("POST", endpoint);
-    request.setRequestHeader("Content-Type", "application/pdf");
-    request.onload = () => {
-      let payload = {};
-      try {
-        payload = JSON.parse(request.responseText || "{}");
-      } catch {
-        payload = {};
-      }
-      if (request.status >= 200 && request.status < 300) {
-        resolve(payload);
-      } else {
-        reject(new Error(payload.error || "Nao foi possivel extrair texto do PDF."));
-      }
-    };
-    request.onerror = () => reject(new Error("Falha de rede ao enviar o PDF. Confirme que o servidor local esta rodando em http://localhost:4173."));
-    request.send(file);
-  });
 }
 
 function bindEvents() {

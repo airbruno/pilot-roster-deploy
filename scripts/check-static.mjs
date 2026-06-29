@@ -16,7 +16,6 @@ const requiredFiles = [
   "icons/app-icon.svg",
   "icons/app-icon-maskable.svg",
   "config.js",
-  "vercel.json",
 ];
 
 for (const file of requiredFiles) {
@@ -29,6 +28,14 @@ const appCheck = spawnSync("node", ["--check", path.join(frontendRoot, "app.js")
 if (appCheck.status !== 0) {
   process.stderr.write(appCheck.stderr || appCheck.stdout);
   process.exit(appCheck.status || 1);
+}
+
+const serviceWorkerCheck = spawnSync("node", ["--check", path.join(frontendRoot, "service-worker.js")], {
+  encoding: "utf8",
+});
+if (serviceWorkerCheck.status !== 0) {
+  process.stderr.write(serviceWorkerCheck.stderr || serviceWorkerCheck.stdout);
+  process.exit(serviceWorkerCheck.status || 1);
 }
 
 const rootHtml = await readFile(path.join(frontendRoot, "index.html"), "utf8");

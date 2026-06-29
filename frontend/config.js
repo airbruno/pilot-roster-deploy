@@ -1,5 +1,4 @@
 window.APP_CONFIG = {
-  API_URL: "",
   FUNCTIONS_REGION: "us-central1",
   FIREBASE: {
     apiKey: "AIzaSyD6izbBAsIeF5BUBNE5WlBq21mkIGTWd3g",

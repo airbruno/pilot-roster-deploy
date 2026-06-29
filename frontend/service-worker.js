@@ -1,10 +1,10 @@
-const CACHE_NAME = "escala-familiar-v18";
+const CACHE_NAME = "escala-familiar-v19";
 const APP_SHELL = [
   "/",
   "/index.html",
   "/piloto/",
-  "/styles.css?v=36",
-  "/app.js?v=36",
+  "/styles.css?v=37",
+  "/app.js?v=37",
   "/config.js",
   "/manifest.webmanifest",
   "/icons/app-icon.svg",
@@ -13,7 +13,6 @@ const APP_SHELL = [
 
 self.addEventListener("install", (event) => {
   event.waitUntil(caches.open(CACHE_NAME).then((cache) => cache.addAll(APP_SHELL)));
-  self.skipWaiting();
 });
 
 self.addEventListener("activate", (event) => {
@@ -25,6 +24,12 @@ self.addEventListener("activate", (event) => {
     ))
   );
   self.clients.claim();
+});
+
+self.addEventListener("message", (event) => {
+  if (event.data?.type === "SKIP_WAITING") {
+    self.skipWaiting();
+  }
 });
 
 self.addEventListener("fetch", (event) => {

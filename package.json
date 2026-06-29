@@ -4,11 +4,11 @@
   "scripts": {
     "sync:frontend": "node scripts/sync-frontend.mjs",
     "check:static": "node scripts/check-static.mjs",
+    "check:parser": "node scripts/check-parser-fixtures.mjs",
     "check:journeys": "node scripts/check-journey-render.mjs",
     "check:functions": "node --check functions/index.js",
-    "check:backend": "node scripts/check-backend.mjs",
     "check:visual": "node scripts/visual-check.mjs",
-    "predeploy": "npm run check:static && npm run check:functions && npm run check:backend && npm run check:visual",
+    "predeploy": "npm run check:static && npm run check:parser && npm run check:journeys && npm run check:functions",
     "deploy:firebase": "firebase deploy"
   }
 }
