@@ -59,6 +59,7 @@ const checks = [
   [rootHtml.includes('rel="manifest"'), "index.html precisa carregar o manifest"],
   [pilotHtml.includes('rel="manifest"'), "piloto/index.html precisa carregar o manifest"],
   [rootHtml.includes('href="/piloto/"'), "index.html precisa apontar para /piloto/"],
+  [pilotHtml.includes('href="/"'), "piloto/index.html precisa apontar para o portal da família"],
   [pilotHtml.includes("../app.js"), "piloto/index.html precisa carregar ../app.js"],
   [css.includes(".today-fab"), "styles.css precisa conter o botao Hoje"],
   [css.includes(".google-login"), "styles.css precisa conter estilo do login Google"],
@@ -66,7 +67,7 @@ const checks = [
   [css.includes(".modal-overlay"), "styles.css precisa conter modal"],
   [css.includes(".login-screen"), "styles.css precisa conter estilos do login"],
   [css.includes("grid-template-columns: 42px minmax(0, 1fr) 42px"), "seletor de mes precisa manter tres colunas no mobile"],
-  [serviceWorker.includes("escala-familiar-v21"), "service-worker.js precisa estar na versão de cache atual"],
+  [serviceWorker.includes("escala-familiar-v22"), "service-worker.js precisa estar na versão de cache atual"],
 ];
 
 const failures = checks.filter(([ok]) => !ok).map(([, message]) => message);
