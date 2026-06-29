@@ -1,7 +1,6 @@
 const state = {
   meta: {
     pilotName: "Bruno",
-    familyNote: "Horarios sujeitos a alteracao operacional. Use esta pagina como referencia familiar.",
     updatedAt: new Date().toISOString(),
   },
   duties: [],
@@ -18,7 +17,6 @@ const els = {
   inactiveDays: document.querySelector("#inactiveDays"),
   updatedAt: document.querySelector("#updatedAt"),
   pilotName: document.querySelector("#pilotName"),
-  familyNote: document.querySelector("#familyNote"),
   fileInput: document.querySelector("#fileInput"),
   importStatus: document.querySelector("#importStatus"),
   publishButton: document.querySelector("#publishButton"),
@@ -28,7 +26,6 @@ const els = {
   prevMonth: document.querySelector("#prevMonth"),
   nextMonth: document.querySelector("#nextMonth"),
   calendar: document.querySelector("#calendar"),
-  familyNoteDisplay: document.querySelector("#familyNoteDisplay"),
   scheduleFooter: document.querySelector("#scheduleFooter"),
   todayButton: document.querySelector("#todayButton"),
   pilotLogin: document.querySelector("#pilotLogin"),
@@ -447,9 +444,10 @@ function formatDate(dateString, options = { day: "2-digit", month: "short", week
 }
 
 function formatWeekdayName(date) {
-  return new Intl.DateTimeFormat("pt-BR", { weekday: "long" })
+  const weekday = new Intl.DateTimeFormat("pt-BR", { weekday: "long" })
     .format(date)
     .toLocaleLowerCase("pt-BR");
+  return weekday.charAt(0).toLocaleUpperCase("pt-BR") + weekday.slice(1);
 }
 
 function monthKey(date) {
@@ -935,7 +933,6 @@ function encodeSharePayload() {
   const payload = {
     meta: {
       pilotName: state.meta.pilotName,
-      familyNote: state.meta.familyNote,
       updatedAt: new Date().toISOString(),
     },
     duties: state.duties,
@@ -1115,7 +1112,6 @@ async function ensureFirebaseUserProfile(user, fallbackRole) {
   if (profile.role === "pilot") {
     await firebaseState.db.collection("pilots").doc(user.uid).set({
       displayName: profile.name,
-      familyNote: state.meta.familyNote,
       createdAt: new Date().toISOString(),
     }, { merge: true });
   }
@@ -1174,7 +1170,6 @@ async function loadFirebasePilotProfile(pilotId, options = {}) {
   const profile = snapshot.exists ? snapshot.data() : {};
   firebaseState.pilotProfile = profile;
   state.meta.pilotName = profile.displayName || firebaseState.profile?.name || state.meta.pilotName;
-  state.meta.familyNote = profile.familyNote || state.meta.familyNote;
   if (updateVisibleMonth && profile.activeRosterMonth) {
     const [year, month] = profile.activeRosterMonth.split("-").map(Number);
     state.visibleMonth = new Date(year, month - 1, 1);
@@ -1284,8 +1279,7 @@ function renderFamilyAccessList() {
 }
 
 function syncMetaFromInputs() {
-  state.meta.pilotName = els.pilotName.value.trim() || "Piloto";
-  state.meta.familyNote = els.familyNote.value.trim();
+  state.meta.pilotName = els.pilotName?.value.trim() || "Piloto";
   state.meta.updatedAt = new Date().toISOString();
   saveLocal();
   render();
@@ -1433,9 +1427,7 @@ function renderCalendar() {
 }
 
 function render() {
-  els.pilotName.value = state.meta.pilotName || "";
-  els.familyNote.value = state.meta.familyNote || "";
-  els.familyNoteDisplay.textContent = state.meta.familyNote || "Sem observacoes adicionais.";
+  if (els.pilotName) els.pilotName.value = state.meta.pilotName || "";
   els.scheduleFooter.textContent = formatUpdatedAt();
   renderSummary();
   renderCalendar();
@@ -1690,7 +1682,6 @@ async function publishFirebaseRoster() {
     meta: {
       ...state.meta,
       pilotName: els.pilotName.value.trim() || firebaseState.profile.name || "Piloto",
-      familyNote: els.familyNote.value.trim(),
       updatedAt: state.meta.updatedAt,
     },
     duties: monthDuties,
@@ -1701,7 +1692,6 @@ async function publishFirebaseRoster() {
   const pilotRef = firebaseState.db.collection("pilots").doc(firebaseState.user.uid);
   await pilotRef.set({
     displayName: payload.meta.pilotName,
-    familyNote: payload.meta.familyNote,
     activeRosterMonth: rosterMonth,
     updatedAt: payload.meta.updatedAt,
   }, { merge: true });
@@ -1828,8 +1818,7 @@ function bindEvents() {
   });
   els.logoutButton?.addEventListener("click", logoutPilot);
   els.familyLogoutButton?.addEventListener("click", logoutPilot);
-  els.pilotName.addEventListener("change", syncMetaFromInputs);
-  els.familyNote.addEventListener("change", syncMetaFromInputs);
+  els.pilotName?.addEventListener("change", syncMetaFromInputs);
   els.fileInput.addEventListener("change", async (event) => {
     const file = event.target.files[0];
     if (!file) return;

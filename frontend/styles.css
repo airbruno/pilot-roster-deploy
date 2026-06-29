@@ -426,7 +426,7 @@ body.pilot-locked .today-fab {
 
 .toolbar-actions {
   align-items: center;
-  grid-template-columns: 42px minmax(190px, 230px) 42px;
+  grid-template-columns: 42px minmax(190px, 230px) 42px auto;
   max-width: 100%;
 }
 
@@ -443,19 +443,6 @@ body.pilot-locked .today-fab {
   padding: 0 12px;
   text-align: center;
   text-transform: lowercase;
-}
-
-.family-note {
-  background: rgba(47, 183, 129, 0.12);
-  border: 1px solid rgba(47, 183, 129, 0.34);
-  border-radius: 8px;
-  color: #b2f0d2;
-  line-height: 1.45;
-  margin-top: 16px;
-  max-width: 100%;
-  min-width: 0;
-  overflow-wrap: anywhere;
-  padding: 14px 16px;
 }
 
 .calendar {
@@ -751,6 +738,10 @@ body.family-mode .family-only {
   display: block;
 }
 
+body.family-mode .toolbar-logout {
+  display: inline-flex;
+}
+
 body.family-mode .workspace {
   grid-template-columns: 1fr;
   border-top: 1px solid rgba(49, 66, 86, 0.92);
@@ -805,31 +796,18 @@ body.family-mode .schedule-area {
   z-index: 20;
 }
 
-.family-logout {
+.toolbar-logout {
   align-items: center;
-  background: #1a2636;
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  border-radius: 999px;
-  bottom: 74px;
-  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.32);
+  background: #172235;
+  border: 1px solid var(--line);
+  border-radius: 8px;
   color: var(--ink);
   display: none;
-  font-size: 0.86rem;
-  font-weight: 900;
+  font-size: 0.82rem;
+  font-weight: 800;
   justify-content: center;
   min-height: 42px;
-  padding: 0 16px;
-  position: fixed;
-  right: 18px;
-  z-index: 20;
-}
-
-body.family-mode .family-logout {
-  display: inline-flex;
-}
-
-body.pilot-locked .family-logout {
-  display: none;
+  padding: 0 12px;
 }
 
 .loading-overlay {
@@ -895,7 +873,7 @@ body.pilot-locked .family-logout {
   }
 
   .toolbar-actions {
-    grid-template-columns: 42px minmax(0, 1fr) 42px;
+    grid-template-columns: 42px minmax(0, 1fr) 42px auto;
     width: 100%;
   }
 
@@ -995,7 +973,7 @@ body.pilot-locked .family-logout {
   }
 
   .toolbar-actions {
-    grid-template-columns: 42px minmax(0, 1fr) 42px;
+    grid-template-columns: 42px minmax(0, 1fr) 42px auto;
     width: 100%;
   }
 
