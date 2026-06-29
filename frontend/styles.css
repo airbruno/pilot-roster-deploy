@@ -586,6 +586,17 @@ body.pilot-locked .today-fab {
   white-space: normal;
 }
 
+.journey-block {
+  display: grid;
+  gap: 8px;
+}
+
+.journey-block + .journey-block {
+  border-top: 1px solid rgba(149, 164, 184, 0.16);
+  margin-top: 2px;
+  padding-top: 10px;
+}
+
 .flight-duty + .flight-duty {
   border-top: 1px solid rgba(149, 164, 184, 0.16);
   padding-top: 8px;
@@ -686,6 +697,10 @@ body.pilot-locked .today-fab {
   font-weight: 700;
   line-height: 1.25;
   padding-left: 6px;
+}
+
+.journey-end {
+  padding-top: 2px;
 }
 
 .mini-duty.off {

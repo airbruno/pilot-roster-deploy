@@ -265,6 +265,24 @@ function flightRouteLabel(duty) {
   return escapeHtml(dutyPlaceLabel(duty));
 }
 
+function isNextDayTime(start, end) {
+  const startMinutes = minutesFromTime(start);
+  const endMinutes = minutesFromTime(end);
+  return startMinutes !== null && endMinutes !== null && endMinutes < startMinutes;
+}
+
+function formatTimeWithDayShift(time, referenceTime) {
+  if (!time) return "";
+  return isNextDayTime(referenceTime, time) ? `${time} (+1)` : time;
+}
+
+function formatDutyTimeRange(duty) {
+  if (!duty.start && !duty.end) return "";
+  if (!duty.start) return formatTimeWithDayShift(duty.end, duty.start);
+  if (!duty.end) return duty.start;
+  return `${duty.start}-${formatTimeWithDayShift(duty.end, duty.start)}`;
+}
+
 function badgeLabel(duty) {
   if (typeToClass(duty.type) === "standby" && /\bHSBE(?:-\d+)?\b/i.test(`${duty.flight || ""} ${duty.notes || ""}`)) {
     return "Sobreaviso (extra)";
@@ -286,7 +304,7 @@ function renderActivityBlock(duty, dutyClass, time) {
 
 function renderDutyLine(duty) {
   const dutyClass = typeToClass(duty.type);
-  const time = [duty.start, duty.end].filter(Boolean).join("-");
+  const time = formatDutyTimeRange(duty);
   if (dutyClass === "flight") {
     const flightNumber = flightLink(duty) || `<span class="flight-code">${escapeHtml(duty.flight || "Voo")}</span>`;
     const timeLine = time ? `<div class="flight-duty-time">${escapeHtml(time)}</div>` : "";
@@ -302,6 +320,51 @@ function renderDutyLine(duty) {
     return renderActivityBlock(duty, dutyClass, time);
   }
   return `<div class="mini-duty ${dutyClass}">${escapeHtml(time)} ${escapeHtml(dutyPlaceLabel(duty))}</div>`;
+}
+
+function splitDayDutiesIntoJourneyBlocks(dayDuties) {
+  const blocks = [];
+  let currentFlightBlock = null;
+
+  dayDuties.forEach((duty) => {
+    if (typeToClass(duty.type) !== "flight") {
+      currentFlightBlock = null;
+      blocks.push({ type: "activity", duties: [duty] });
+      return;
+    }
+
+    if (!currentFlightBlock || duty.reportTime) {
+      currentFlightBlock = { type: "flight", duties: [] };
+      blocks.push(currentFlightBlock);
+    }
+    currentFlightBlock.duties.push(duty);
+  });
+
+  return blocks;
+}
+
+function formatJourneyDutyEnd(duties) {
+  const dutyEndDuty = [...duties].reverse().find((duty) => duty.dutyEnd || duty.end);
+  if (!dutyEndDuty) return "";
+  const dutyEnd = dutyEndDuty.dutyEnd || dutyEndDuty.end;
+  const reference = duties[0]?.start || dutyEndDuty.start || "";
+  return formatTimeWithDayShift(dutyEnd, reference);
+}
+
+function renderJourneyBlock(block) {
+  if (block.type !== "flight") return block.duties.map(renderDutyLine).join("");
+
+  const reportDuty = block.duties.find((duty) => duty.reportTime);
+  const report = reportDuty ? `<div class="mini-report journey-report">Apresentação: ${escapeHtml(reportDuty.reportTime)}</div>` : "";
+  const dutyEnd = formatJourneyDutyEnd(block.duties);
+  const dutyEndLine = dutyEnd ? `<div class="mini-report journey-end">Fim da jornada: ${escapeHtml(dutyEnd)}</div>` : "";
+  return `
+    <div class="journey-block">
+      ${report}
+      ${block.duties.map(renderDutyLine).join("")}
+      ${dutyEndLine}
+    </div>
+  `;
 }
 
 function inferReportTime(input) {
@@ -1310,12 +1373,7 @@ function renderCalendar() {
       : inactive
         ? `<span class="badge flight">Voo</span>`
         : "";
-    const reportDuty = dayDuties.find((duty) => typeToClass(duty.type) === "flight" && duty.reportTime);
-    const report = reportDuty ? `<div class="mini-report">Apresentação: ${escapeHtml(reportDuty.reportTime)}</div>` : "";
-    const dutyEndDuty = [...dayDuties].reverse().find((duty) => typeToClass(duty.type) === "flight" && (duty.dutyEnd || duty.end));
-    const dutyEnd = dutyEndDuty ? dutyEndDuty.dutyEnd || dutyEndDuty.end : "";
-    const dutyEndLine = dutyEnd ? `<div class="mini-report">Fim da jornada: ${escapeHtml(dutyEnd)}</div>` : "";
-    const duties = dayDuties.length ? dayDuties.map(renderDutyLine).join("") : inactive
+    const duties = dayDuties.length ? splitDayDutiesIntoJourneyBlocks(dayDuties).map(renderJourneyBlock).join("") : inactive
       ? `<div class="mini-duty flight inactive-duty">${bedIcon()}<span>Inativo</span></div>`
       : `<div class="no-data">Sem dados</div>`;
     const weekdayName = formatWeekdayName(date);
@@ -1325,9 +1383,7 @@ function renderCalendar() {
           <span class="day-title"><span class="day-date">${date.getDate()}</span><span class="day-weekday">${escapeHtml(weekdayName)}</span></span>
           ${badge}
         </div>
-        ${report}
         ${duties}
-        ${dutyEndLine}
       </article>
     `);
   });
