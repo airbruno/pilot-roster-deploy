@@ -46,6 +46,10 @@ const serviceWorker = await readFile(path.join(frontendRoot, "service-worker.js"
 const checks = [
   [rootHtml.includes('id="pilotLogin"'), "index.html precisa conter a tela de login"],
   [pilotHtml.includes('id="pilotLogin"'), "piloto/index.html precisa conter a tela de login"],
+  [rootHtml.includes("user-scalable=no"), "index.html precisa impedir zoom por gesto"],
+  [pilotHtml.includes("user-scalable=no"), "piloto/index.html precisa impedir zoom por gesto"],
+  [rootHtml.includes("viewport-fit=cover"), "index.html precisa respeitar safe area do PWA"],
+  [pilotHtml.includes("viewport-fit=cover"), "piloto/index.html precisa respeitar safe area do PWA"],
   [rootHtml.includes('id="googleLoginButton"'), "index.html precisa conter login com Google"],
   [pilotHtml.includes('id="googleLoginButton"'), "piloto/index.html precisa conter login com Google"],
   [rootHtml.includes('id="passwordAccessButton"'), "index.html precisa conter acesso sem Google"],
@@ -67,7 +71,7 @@ const checks = [
   [css.includes(".modal-overlay"), "styles.css precisa conter modal"],
   [css.includes(".login-screen"), "styles.css precisa conter estilos do login"],
   [css.includes("grid-template-columns: 42px minmax(0, 1fr) 42px"), "seletor de mes precisa manter tres colunas no mobile"],
-  [serviceWorker.includes("escala-familiar-v22"), "service-worker.js precisa estar na versão de cache atual"],
+  [serviceWorker.includes("escala-familiar-v23"), "service-worker.js precisa estar na versão de cache atual"],
 ];
 
 const failures = checks.filter(([ok]) => !ok).map(([, message]) => message);
