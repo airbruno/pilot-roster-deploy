@@ -35,10 +35,19 @@ const els = {
   authPassword: document.querySelector("#authPassword"),
   passwordAccessButton: document.querySelector("#passwordAccessButton"),
   passwordLoginPanel: document.querySelector("#passwordLoginPanel"),
+  resetPasswordButton: document.querySelector("#resetPasswordButton"),
   createAccountButton: document.querySelector("#createAccountButton"),
   googleLoginButton: document.querySelector("#googleLoginButton"),
   loginError: document.querySelector("#loginError"),
   logoutButton: document.querySelector("#logoutButton"),
+  profileMenu: document.querySelector("#profileMenu"),
+  profileButton: document.querySelector("#profileButton"),
+  profilePhoto: document.querySelector("#profilePhoto"),
+  profileInitial: document.querySelector("#profileInitial"),
+  profilePanel: document.querySelector("#profilePanel"),
+  profileName: document.querySelector("#profileName"),
+  profileEmail: document.querySelector("#profileEmail"),
+  profileLogoutButton: document.querySelector("#profileLogoutButton"),
   familyLogoutButton: document.querySelector("#familyLogoutButton"),
   familyAccessEmail: document.querySelector("#familyAccessEmail"),
   grantFamilyButton: document.querySelector("#grantFamilyButton"),
@@ -210,6 +219,7 @@ function configureLegacyAuthUi() {
   if (els.createAccountButton) els.createAccountButton.hidden = true;
   if (els.googleLoginButton) els.googleLoginButton.hidden = true;
   if (els.passwordAccessButton) els.passwordAccessButton.hidden = true;
+  if (els.resetPasswordButton) els.resetPasswordButton.hidden = true;
   if (els.passwordLoginPanel) els.passwordLoginPanel.hidden = false;
 }
 
@@ -232,6 +242,18 @@ function firebaseErrorMessage(error) {
   if (code.includes("auth/account-exists-with-different-credential")) return "Este email ja usa outro método de login.";
   if (code.includes("permission-denied")) return "Voce nao tem permissao para acessar estes dados.";
   return error?.message || "Nao foi possivel concluir a acao.";
+}
+
+function setLoginMessage(message, tone = "error") {
+  if (!els.loginError) return;
+  els.loginError.textContent = message;
+  els.loginError.className = `import-status visible ${tone}`;
+}
+
+function clearLoginMessage() {
+  if (!els.loginError) return;
+  els.loginError.textContent = "";
+  els.loginError.className = "import-status error";
 }
 
 function normalizeText(value) {
@@ -1001,9 +1023,54 @@ function hasPilotAccess() {
 function setPilotLocked(locked) {
   document.body.classList.toggle("pilot-locked", locked);
   if (els.pilotLogin) els.pilotLogin.hidden = !locked;
+  if (locked) setProfileMenuUser(null);
   if (locked) {
-    if (els.loginError) els.loginError.classList.remove("visible");
+    clearLoginMessage();
     requestAnimationFrame(() => (els.authEmail || els.pilotToken)?.focus());
+  }
+}
+
+function userInitial(user) {
+  const name = currentUserName(user);
+  return String(name || "?").trim().charAt(0).toUpperCase() || "?";
+}
+
+function closeProfilePanel() {
+  if (els.profilePanel) els.profilePanel.hidden = true;
+  if (els.profileButton) els.profileButton.setAttribute("aria-expanded", "false");
+}
+
+function toggleProfilePanel() {
+  if (!els.profilePanel || !els.profileButton) return;
+  const nextHidden = !els.profilePanel.hidden;
+  els.profilePanel.hidden = nextHidden;
+  els.profileButton.setAttribute("aria-expanded", nextHidden ? "false" : "true");
+}
+
+function setProfileMenuUser(user) {
+  const active = Boolean(user);
+  document.body.classList.toggle("logged-in", active);
+  if (els.profileMenu) els.profileMenu.hidden = !active;
+  if (!active) {
+    closeProfilePanel();
+    return;
+  }
+
+  const name = currentUserName(user);
+  const email = user.email || "";
+  if (els.profileName) els.profileName.textContent = name;
+  if (els.profileEmail) els.profileEmail.textContent = email;
+  if (els.profileInitial) els.profileInitial.textContent = userInitial(user);
+  if (els.profilePhoto) {
+    if (user.photoURL) {
+      els.profilePhoto.src = user.photoURL;
+      els.profilePhoto.hidden = false;
+      if (els.profileInitial) els.profileInitial.hidden = true;
+    } else {
+      els.profilePhoto.removeAttribute("src");
+      els.profilePhoto.hidden = true;
+      if (els.profileInitial) els.profileInitial.hidden = false;
+    }
   }
 }
 
@@ -1067,16 +1134,13 @@ async function authenticateFirebase(createAccount = false) {
   const email = String(els.authEmail?.value || "").trim();
   const password = String(els.authPassword?.value || "");
   if (!email || !password) {
-    if (els.loginError) {
-      els.loginError.textContent = "Informe email e senha.";
-      els.loginError.classList.add("visible");
-    }
+    setLoginMessage("Informe email e senha.");
     return false;
   }
 
   try {
     showLoading(createAccount ? "Criando acesso..." : "Entrando...");
-    if (els.loginError) els.loginError.classList.remove("visible");
+    clearLoginMessage();
     if (createAccount) {
       const credential = await firebaseState.auth.createUserWithEmailAndPassword(email, password);
       await ensureFirebaseUserProfile(credential.user, currentAuthRole());
@@ -1087,10 +1151,31 @@ async function authenticateFirebase(createAccount = false) {
     if (els.authPassword) els.authPassword.value = "";
     return true;
   } catch (error) {
-    if (els.loginError) {
-      els.loginError.textContent = firebaseErrorMessage(error);
-      els.loginError.classList.add("visible");
-    }
+    setLoginMessage(firebaseErrorMessage(error));
+    return false;
+  } finally {
+    hideLoading();
+  }
+}
+
+async function resetFirebasePassword() {
+  if (!firebaseEnabled()) {
+    setLoginMessage("Firebase nao esta configurado neste ambiente.");
+    return false;
+  }
+  const email = String(els.authEmail?.value || "").trim();
+  if (!email) {
+    setLoginMessage("Informe seu email para receber o link de recuperação.");
+    return false;
+  }
+
+  try {
+    showLoading("Enviando recuperação...");
+    await firebaseState.auth.sendPasswordResetEmail(email);
+    setLoginMessage("Se esse email tiver uma conta, enviaremos um link de redefinição de senha.", "ok");
+    return true;
+  } catch (error) {
+    setLoginMessage(firebaseErrorMessage(error));
     return false;
   } finally {
     hideLoading();
@@ -1130,16 +1215,13 @@ function revealPasswordLogin() {
 
 async function authenticateWithGoogle() {
   if (!firebaseEnabled()) {
-    if (els.loginError) {
-      els.loginError.textContent = "Firebase nao esta configurado neste ambiente.";
-      els.loginError.classList.add("visible");
-    }
+    setLoginMessage("Firebase nao esta configurado neste ambiente.");
     return false;
   }
 
   try {
     showLoading("Entrando com Google...");
-    if (els.loginError) els.loginError.classList.remove("visible");
+    clearLoginMessage();
     const provider = new window.firebase.auth.GoogleAuthProvider();
     provider.setCustomParameters({ prompt: "select_account" });
     try {
@@ -1155,10 +1237,7 @@ async function authenticateWithGoogle() {
     }
     return true;
   } catch (error) {
-    if (els.loginError) {
-      els.loginError.textContent = firebaseErrorMessage(error);
-      els.loginError.classList.add("visible");
-    }
+    setLoginMessage(firebaseErrorMessage(error));
     return false;
   } finally {
     hideLoading();
@@ -1196,19 +1275,18 @@ async function loadFirebaseSession(user) {
   firebaseState.targetPilotId = "";
 
   if (!user) {
+    setProfileMenuUser(null);
     setPilotLocked(true);
     return;
   }
+  setProfileMenuUser(user);
 
   const isPilotRoute = isPilotPath();
   const profile = await ensureFirebaseUserProfile(user, currentAuthRole());
   firebaseState.profile = profile;
 
   if (isPilotRoute && profile.role !== "pilot") {
-    if (els.loginError) {
-      els.loginError.textContent = "Esta conta nao tem perfil de piloto.";
-      els.loginError.classList.add("visible");
-    }
+    setLoginMessage("Esta conta nao tem perfil de piloto.");
     await firebaseState.auth.signOut();
     return;
   }
@@ -1897,6 +1975,13 @@ function bindEvents() {
   });
   els.googleLoginButton?.addEventListener("click", authenticateWithGoogle);
   els.passwordAccessButton?.addEventListener("click", revealPasswordLogin);
+  els.resetPasswordButton?.addEventListener("click", resetFirebasePassword);
+  els.profileButton?.addEventListener("click", toggleProfilePanel);
+  els.profileLogoutButton?.addEventListener("click", logoutPilot);
+  document.addEventListener("click", (event) => {
+    if (!els.profileMenu || els.profileMenu.hidden) return;
+    if (!els.profileMenu.contains(event.target)) closeProfilePanel();
+  });
   els.closeFamilyCreatedModal?.addEventListener("click", closeFamilyCreatedModal);
   els.copyFamilyCreatedMessage?.addEventListener("click", copyFamilyCreatedMessage);
   els.familyCreatedModal?.addEventListener("click", (event) => {
@@ -1982,11 +2067,8 @@ function init() {
     firebaseState.auth.onAuthStateChanged((user) => {
       withLoading("Carregando acesso...", () => loadFirebaseSession(user)).catch((error) => {
         console.error(error);
-        if (els.loginError) {
-          els.loginError.textContent = firebaseErrorMessage(error);
-          els.loginError.classList.add("visible");
-        }
         setPilotLocked(true);
+        setLoginMessage(firebaseErrorMessage(error));
       });
     });
     return;

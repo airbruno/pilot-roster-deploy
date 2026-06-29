@@ -54,6 +54,10 @@ const checks = [
   [pilotHtml.includes('id="googleLoginButton"'), "piloto/index.html precisa conter login com Google"],
   [rootHtml.includes('id="passwordAccessButton"'), "index.html precisa conter acesso sem Google"],
   [pilotHtml.includes('id="passwordAccessButton"'), "piloto/index.html precisa conter acesso sem Google"],
+  [rootHtml.includes('id="resetPasswordButton"'), "index.html precisa conter recuperacao de senha"],
+  [pilotHtml.includes('id="resetPasswordButton"'), "piloto/index.html precisa conter recuperacao de senha"],
+  [rootHtml.includes('id="profileMenu"'), "index.html precisa conter menu de perfil"],
+  [pilotHtml.includes('id="profileMenu"'), "piloto/index.html precisa conter menu de perfil"],
   [rootHtml.includes('id="familyCreatedModal"'), "index.html precisa conter modal de conta familiar criada"],
   [pilotHtml.includes('id="familyCreatedModal"'), "piloto/index.html precisa conter modal de conta familiar criada"],
   [!rootHtml.includes('id="upcomingDays"'), "index.html nao deve conter visão de próximos dias"],
@@ -68,10 +72,11 @@ const checks = [
   [css.includes(".today-fab"), "styles.css precisa conter o botao Hoje"],
   [css.includes(".google-login"), "styles.css precisa conter estilo do login Google"],
   [css.includes(".password-login-panel"), "styles.css precisa conter painel de acesso sem Google"],
+  [css.includes(".profile-menu"), "styles.css precisa conter menu de perfil"],
   [css.includes(".modal-overlay"), "styles.css precisa conter modal"],
   [css.includes(".login-screen"), "styles.css precisa conter estilos do login"],
   [css.includes("grid-template-columns: 42px minmax(0, 1fr) 42px"), "seletor de mes precisa manter tres colunas no mobile"],
-  [serviceWorker.includes("escala-familiar-v23"), "service-worker.js precisa estar na versão de cache atual"],
+  [serviceWorker.includes("escala-familiar-v24"), "service-worker.js precisa estar na versão de cache atual"],
 ];
 
 const failures = checks.filter(([ok]) => !ok).map(([, message]) => message);

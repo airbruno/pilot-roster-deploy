@@ -11,7 +11,7 @@
     <link rel="manifest" href="/manifest.webmanifest" />
     <link rel="icon" href="/icons/app-icon.svg" type="image/svg+xml" />
     <link rel="apple-touch-icon" href="/icons/app-icon.svg" />
-    <link rel="stylesheet" href="../styles.css?v=41" />
+    <link rel="stylesheet" href="../styles.css?v=42" />
   </head>
   <body>
     <section class="login-screen" id="pilotLogin" aria-label="Login do piloto" hidden>
@@ -37,6 +37,7 @@
             Senha
             <input id="authPassword" type="password" autocomplete="current-password" placeholder="Digite sua senha" />
           </label>
+          <button class="text-button reset-password-button" id="resetPasswordButton" type="button">Esqueci minha senha</button>
           <button type="submit">Entrar</button>
           <button class="secondary" id="createAccountButton" type="button">Criar conta</button>
         </div>
@@ -59,7 +60,6 @@
         <nav class="view-toggle" aria-label="Navegação">
           <a class="nav-link" id="familyTab" href="/">Família</a>
           <a class="nav-link admin-only-nav" id="adminTab" href="/piloto/">Piloto</a>
-          <button class="nav-link logout-button" id="logoutButton" type="button">Sair</button>
         </nav>
       </section>
 
@@ -141,6 +141,17 @@
     </main>
     <button class="update-app-button" id="updateAppButton" type="button" hidden>Atualizar app</button>
     <button class="today-fab" id="todayButton" type="button" aria-label="Ir para hoje" title="Ir para hoje">Hoje</button>
+    <div class="profile-menu" id="profileMenu" hidden>
+      <button class="profile-button" id="profileButton" type="button" aria-label="Perfil" aria-expanded="false">
+        <img id="profilePhoto" alt="" hidden />
+        <span id="profileInitial">?</span>
+      </button>
+      <div class="profile-panel" id="profilePanel" hidden>
+        <strong id="profileName">Usuário</strong>
+        <span id="profileEmail"></span>
+        <button class="secondary" id="profileLogoutButton" type="button">Sair</button>
+      </div>
+    </div>
     <div class="loading-overlay" id="loadingOverlay" hidden>
       <div class="loading-card" role="status" aria-live="polite">
         <span class="loading-spinner" aria-hidden="true"></span>
@@ -160,6 +171,6 @@
     <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-functions-compat.js"></script>
-    <script src="../app.js?v=41"></script>
+    <script src="../app.js?v=42"></script>
   </body>
 </html>
