@@ -330,11 +330,35 @@ function renderDutyLine(duty) {
   return `<div class="mini-duty ${dutyClass}">${escapeHtml(time)} ${escapeHtml(dutyPlaceLabel(duty))}</div>`;
 }
 
+function displayOrderKeyForDuty(duty, index, duties) {
+  if (typeToClass(duty.type) !== "flight" || duty.reportTime) return index;
+  const dutyStart = minutesFromTime(duty.start);
+  if (dutyStart === null || dutyStart > 6 * 60) return index;
+
+  const anchorIndex = duties.findIndex((candidate, candidateIndex) => {
+    if (candidateIndex === index || typeToClass(candidate.type) !== "flight") return false;
+    const candidateStart = minutesFromTime(candidate.start);
+    if (candidateStart === null || candidateStart <= dutyStart) return false;
+    if (!candidate.to || !duty.from || candidate.to !== duty.from) return false;
+    const gap = elapsedMinutesBetween(candidate.end, duty.start);
+    return gap !== null && gap <= 3 * 60;
+  });
+
+  return anchorIndex >= 0 ? anchorIndex + 0.1 + (dutyStart / (24 * 60 * 100)) : index;
+}
+
+function orderDutiesForJourneyDisplay(dayDuties) {
+  return dayDuties
+    .map((duty, index) => ({ duty, order: displayOrderKeyForDuty(duty, index, dayDuties), index }))
+    .sort((a, b) => a.order - b.order || a.index - b.index)
+    .map(({ duty }) => duty);
+}
+
 function splitDayDutiesIntoJourneyBlocks(dayDuties) {
   const blocks = [];
   let currentFlightBlock = null;
 
-  dayDuties.forEach((duty) => {
+  orderDutiesForJourneyDisplay(dayDuties).forEach((duty) => {
     if (typeToClass(duty.type) !== "flight") {
       currentFlightBlock = null;
       blocks.push({ type: "activity", duties: [duty] });

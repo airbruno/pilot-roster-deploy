@@ -1,10 +1,10 @@
-const CACHE_NAME = "escala-familiar-v16";
+const CACHE_NAME = "escala-familiar-v17";
 const APP_SHELL = [
   "/",
   "/index.html",
   "/piloto/",
-  "/styles.css?v=34",
-  "/app.js?v=34",
+  "/styles.css?v=35",
+  "/app.js?v=35",
   "/config.js",
   "/manifest.webmanifest",
   "/icons/app-icon.svg",
