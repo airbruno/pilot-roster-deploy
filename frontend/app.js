@@ -333,7 +333,8 @@ function splitDayDutiesIntoJourneyBlocks(dayDuties) {
       return;
     }
 
-    if (!currentFlightBlock || duty.reportTime) {
+    const currentJourneyEnded = currentFlightBlock?.duties.some((currentDuty) => currentDuty.dutyEnd);
+    if (!currentFlightBlock || (duty.reportTime && currentJourneyEnded)) {
       currentFlightBlock = { type: "flight", duties: [] };
       blocks.push(currentFlightBlock);
     }
