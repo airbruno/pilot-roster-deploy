@@ -25,7 +25,6 @@ const els = {
   monthLabel: document.querySelector("#monthLabel"),
   prevMonth: document.querySelector("#prevMonth"),
   nextMonth: document.querySelector("#nextMonth"),
-  upcomingDays: document.querySelector("#upcomingDays"),
   calendar: document.querySelector("#calendar"),
   scheduleFooter: document.querySelector("#scheduleFooter"),
   todayButton: document.querySelector("#todayButton"),
@@ -34,6 +33,8 @@ const els = {
   pilotToken: document.querySelector("#pilotToken"),
   authEmail: document.querySelector("#authEmail"),
   authPassword: document.querySelector("#authPassword"),
+  passwordAccessButton: document.querySelector("#passwordAccessButton"),
+  passwordLoginPanel: document.querySelector("#passwordLoginPanel"),
   createAccountButton: document.querySelector("#createAccountButton"),
   googleLoginButton: document.querySelector("#googleLoginButton"),
   loginError: document.querySelector("#loginError"),
@@ -45,6 +46,10 @@ const els = {
   loadingOverlay: document.querySelector("#loadingOverlay"),
   loadingMessage: document.querySelector("#loadingMessage"),
   updateAppButton: document.querySelector("#updateAppButton"),
+  familyCreatedModal: document.querySelector("#familyCreatedModal"),
+  familyCreatedMessage: document.querySelector("#familyCreatedMessage"),
+  copyFamilyCreatedMessage: document.querySelector("#copyFamilyCreatedMessage"),
+  closeFamilyCreatedModal: document.querySelector("#closeFamilyCreatedModal"),
 };
 
 const STORAGE_KEY = "pilot-family-schedule-v1";
@@ -204,6 +209,8 @@ function configureLegacyAuthUi() {
   }
   if (els.createAccountButton) els.createAccountButton.hidden = true;
   if (els.googleLoginButton) els.googleLoginButton.hidden = true;
+  if (els.passwordAccessButton) els.passwordAccessButton.hidden = true;
+  if (els.passwordLoginPanel) els.passwordLoginPanel.hidden = false;
 }
 
 function currentAuthRole() {
@@ -1073,6 +1080,7 @@ async function authenticateFirebase(createAccount = false) {
     if (createAccount) {
       const credential = await firebaseState.auth.createUserWithEmailAndPassword(email, password);
       await ensureFirebaseUserProfile(credential.user, currentAuthRole());
+      if (currentAuthRole() === "family") showFamilyCreatedModal(credential.user.email || email);
     } else {
       await firebaseState.auth.signInWithEmailAndPassword(email, password);
     }
@@ -1087,6 +1095,37 @@ async function authenticateFirebase(createAccount = false) {
   } finally {
     hideLoading();
   }
+}
+
+function familyCreatedText(email) {
+  return `Avise seu piloto que você criou a conta. Seu email é ${email}.`;
+}
+
+function showFamilyCreatedModal(email) {
+  if (!els.familyCreatedModal || !els.familyCreatedMessage) return;
+  els.familyCreatedMessage.textContent = familyCreatedText(email);
+  els.familyCreatedModal.hidden = false;
+}
+
+function closeFamilyCreatedModal() {
+  if (els.familyCreatedModal) els.familyCreatedModal.hidden = true;
+}
+
+async function copyFamilyCreatedMessage() {
+  const text = els.familyCreatedMessage?.textContent || "";
+  if (!text) return;
+  try {
+    await navigator.clipboard.writeText(text);
+    if (els.copyFamilyCreatedMessage) els.copyFamilyCreatedMessage.textContent = "Copiado";
+  } catch {
+    if (els.copyFamilyCreatedMessage) els.copyFamilyCreatedMessage.textContent = "Selecione e copie";
+  }
+}
+
+function revealPasswordLogin() {
+  if (els.passwordLoginPanel) els.passwordLoginPanel.hidden = false;
+  if (els.passwordAccessButton) els.passwordAccessButton.hidden = true;
+  requestAnimationFrame(() => els.authEmail?.focus());
 }
 
 async function authenticateWithGoogle() {
@@ -1105,7 +1144,8 @@ async function authenticateWithGoogle() {
     provider.setCustomParameters({ prompt: "select_account" });
     try {
       const credential = await firebaseState.auth.signInWithPopup(provider);
-      await ensureFirebaseUserProfile(credential.user, currentAuthRole());
+      const profile = await ensureFirebaseUserProfile(credential.user, currentAuthRole());
+      if (currentAuthRole() === "family" && profile.__created) showFamilyCreatedModal(credential.user.email || "");
     } catch (error) {
       if (error?.code === "auth/popup-blocked" || error?.code === "auth/popup-closed-by-user" || error?.code === "auth/cancelled-popup-request") {
         await firebaseState.auth.signInWithRedirect(provider);
@@ -1128,7 +1168,7 @@ async function authenticateWithGoogle() {
 async function ensureFirebaseUserProfile(user, fallbackRole) {
   const userRef = firebaseState.db.collection("users").doc(user.uid);
   const snapshot = await userRef.get();
-  if (snapshot.exists) return snapshot.data();
+  if (snapshot.exists) return { ...snapshot.data(), __created: false };
 
   const profile = {
     role: fallbackRole,
@@ -1146,7 +1186,7 @@ async function ensureFirebaseUserProfile(user, fallbackRole) {
     }, { merge: true });
   }
 
-  return profile;
+  return { ...profile, __created: true };
 }
 
 async function loadFirebaseSession(user) {
@@ -1392,10 +1432,6 @@ function datesForVisibleMonth() {
   });
 }
 
-function addDays(date, amount) {
-  return new Date(date.getFullYear(), date.getMonth(), date.getDate() + amount);
-}
-
 function dutiesForDate(key) {
   return state.duties.filter((duty) => duty.date === key);
 }
@@ -1430,72 +1466,6 @@ function bedIcon() {
       <path d="M21 18v2" />
       <path d="M3 14h18" />
     </svg>
-  `;
-}
-
-function upcomingSummary(dayDuties, inactive) {
-  if (inactive) return `${bedIcon()}<span>Inativo</span>`;
-  if (!dayDuties.length) return "<span>Sem dados</span>";
-
-  const flights = dayDuties.filter((duty) => typeToClass(duty.type) === "flight");
-  if (flights.length) {
-    const first = flights[0];
-    const route = [first.from, first.to].filter(Boolean).join(" → ");
-    const flight = first.flight ? `${escapeHtml(first.flight)} ` : "";
-    const timeRange = formatDutyTimeRange(first);
-    const time = timeRange ? ` · ${escapeHtml(timeRange)}` : "";
-    const extra = flights.length > 1 ? ` · +${flights.length - 1} voo(s)` : "";
-    return `<span>${flight}${escapeHtml(route || "Voo")}${time}${extra}</span>`;
-  }
-
-  const duty = dayDuties[0];
-  const dutyClass = typeToClass(duty.type);
-  const place = duty.from ? ` · ${escapeHtml(duty.from)}` : "";
-  const timeRange = formatDutyTimeRange(duty);
-  const time = timeRange ? ` · ${escapeHtml(timeRange)}` : "";
-  const icon = dutyClass === "off" ? bedIcon() : "";
-  return `${icon}<span>${escapeHtml(badgeLabel(duty))}${place}${time}</span>`;
-}
-
-function renderUpcomingDays() {
-  if (!els.upcomingDays) return;
-  if (!state.duties.length) {
-    els.upcomingDays.hidden = true;
-    els.upcomingDays.innerHTML = "";
-    return;
-  }
-
-  const today = new Date();
-  const items = Array.from({ length: 7 }, (_, index) => {
-    const date = addDays(today, index);
-    const key = dateKey(date);
-    const dayDuties = dutiesForDate(key);
-    const inactive = isInactiveDate(key);
-    const primary = dayDuties[0];
-    const badge = primary
-      ? `<span class="badge ${typeToClass(primary.type)}">${escapeHtml(badgeLabel(primary))}</span>`
-      : inactive
-        ? `<span class="badge flight">Voo</span>`
-        : "";
-    return `
-      <div class="upcoming-item ${key === todayKey() ? "today" : ""}">
-        <div class="upcoming-date">
-          <strong>${date.getDate()}</strong>
-          <span>${escapeHtml(formatWeekdayName(date))}</span>
-          ${badge}
-        </div>
-        <div class="upcoming-detail ${inactive ? "inactive" : ""}">${upcomingSummary(dayDuties, inactive)}</div>
-      </div>
-    `;
-  }).join("");
-
-  els.upcomingDays.hidden = false;
-  els.upcomingDays.innerHTML = `
-    <div class="upcoming-heading">
-      <h3>Próximos dias</h3>
-      <span>A partir de hoje</span>
-    </div>
-    <div class="upcoming-list">${items}</div>
   `;
 }
 
@@ -1542,7 +1512,6 @@ function render() {
   if (els.pilotName) els.pilotName.value = state.meta.pilotName || "";
   els.scheduleFooter.textContent = formatUpdatedAt();
   renderSummary();
-  renderUpcomingDays();
   renderCalendar();
   if (state.mode === "admin") renderFamilyAccessList();
 }
@@ -1927,6 +1896,12 @@ function bindEvents() {
     }
   });
   els.googleLoginButton?.addEventListener("click", authenticateWithGoogle);
+  els.passwordAccessButton?.addEventListener("click", revealPasswordLogin);
+  els.closeFamilyCreatedModal?.addEventListener("click", closeFamilyCreatedModal);
+  els.copyFamilyCreatedMessage?.addEventListener("click", copyFamilyCreatedMessage);
+  els.familyCreatedModal?.addEventListener("click", (event) => {
+    if (event.target === els.familyCreatedModal) closeFamilyCreatedModal();
+  });
   els.logoutButton?.addEventListener("click", logoutPilot);
   els.familyLogoutButton?.addEventListener("click", logoutPilot);
   els.pilotName?.addEventListener("change", syncMetaFromInputs);

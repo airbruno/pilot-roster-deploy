@@ -11,7 +11,7 @@
     <link rel="manifest" href="/manifest.webmanifest" />
     <link rel="icon" href="/icons/app-icon.svg" type="image/svg+xml" />
     <link rel="apple-touch-icon" href="/icons/app-icon.svg" />
-    <link rel="stylesheet" href="../styles.css?v=38" />
+    <link rel="stylesheet" href="../styles.css?v=39" />
   </head>
   <body>
     <section class="login-screen" id="pilotLogin" aria-label="Login do piloto" hidden>
@@ -25,18 +25,21 @@
           <p class="eyebrow">Acesso do piloto</p>
           <h1>Entrar</h1>
         </div>
-        <label>
-          Email
-          <input id="authEmail" type="email" autocomplete="email" placeholder="nome@email.com" />
-        </label>
-        <label>
-          Senha
-          <input id="authPassword" type="password" autocomplete="current-password" placeholder="Digite sua senha" />
-        </label>
         <div class="import-status error" id="loginError" role="alert"></div>
-        <button type="submit">Entrar</button>
-        <button class="secondary" id="createAccountButton" type="button">Criar conta</button>
         <button class="google-login" id="googleLoginButton" type="button">Entrar com Google</button>
+        <button class="text-button" id="passwordAccessButton" type="button">Acesso sem Google</button>
+        <div class="password-login-panel" id="passwordLoginPanel" hidden>
+          <label>
+            Email
+            <input id="authEmail" type="email" autocomplete="email" placeholder="nome@email.com" />
+          </label>
+          <label>
+            Senha
+            <input id="authPassword" type="password" autocomplete="current-password" placeholder="Digite sua senha" />
+          </label>
+          <button type="submit">Entrar</button>
+          <button class="secondary" id="createAccountButton" type="button">Criar conta</button>
+        </div>
       </form>
     </section>
     <main class="app-shell">
@@ -130,7 +133,6 @@
             </div>
           </div>
 
-          <section class="upcoming-section" id="upcomingDays" aria-label="Próximos dias" hidden></section>
           <div class="calendar" id="calendar" aria-label="Calendario mensal"></div>
           <footer class="schedule-footer" id="scheduleFooter"></footer>
         </section>
@@ -144,11 +146,19 @@
         <span id="loadingMessage">Carregando...</span>
       </div>
     </div>
+    <div class="modal-overlay" id="familyCreatedModal" hidden>
+      <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="familyCreatedTitle">
+        <h2 id="familyCreatedTitle">Conta criada</h2>
+        <p id="familyCreatedMessage"></p>
+        <button class="copy-button" id="copyFamilyCreatedMessage" type="button">Copiar mensagem</button>
+        <button class="secondary" id="closeFamilyCreatedModal" type="button">Fechar</button>
+      </div>
+    </div>
     <script src="../config.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-functions-compat.js"></script>
-    <script src="../app.js?v=38"></script>
+    <script src="../app.js?v=39"></script>
   </body>
 </html>
