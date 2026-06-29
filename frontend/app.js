@@ -25,6 +25,7 @@ const els = {
   monthLabel: document.querySelector("#monthLabel"),
   prevMonth: document.querySelector("#prevMonth"),
   nextMonth: document.querySelector("#nextMonth"),
+  upcomingDays: document.querySelector("#upcomingDays"),
   calendar: document.querySelector("#calendar"),
   scheduleFooter: document.querySelector("#scheduleFooter"),
   todayButton: document.querySelector("#todayButton"),
@@ -34,6 +35,7 @@ const els = {
   authEmail: document.querySelector("#authEmail"),
   authPassword: document.querySelector("#authPassword"),
   createAccountButton: document.querySelector("#createAccountButton"),
+  googleLoginButton: document.querySelector("#googleLoginButton"),
   loginError: document.querySelector("#loginError"),
   logoutButton: document.querySelector("#logoutButton"),
   familyLogoutButton: document.querySelector("#familyLogoutButton"),
@@ -201,6 +203,7 @@ function configureLegacyAuthUi() {
     els.authPassword.autocomplete = "current-password";
   }
   if (els.createAccountButton) els.createAccountButton.hidden = true;
+  if (els.googleLoginButton) els.googleLoginButton.hidden = true;
 }
 
 function currentAuthRole() {
@@ -218,6 +221,8 @@ function firebaseErrorMessage(error) {
   if (code.includes("auth/email-already-in-use")) return "Este email ja tem uma conta.";
   if (code.includes("auth/weak-password")) return "Use uma senha com pelo menos 6 caracteres.";
   if (code.includes("auth/invalid-email")) return "Email invalido.";
+  if (code.includes("auth/operation-not-allowed")) return "Ative o provedor Google no Firebase Authentication.";
+  if (code.includes("auth/account-exists-with-different-credential")) return "Este email ja usa outro método de login.";
   if (code.includes("permission-denied")) return "Voce nao tem permissao para acessar estes dados.";
   return error?.message || "Nao foi possivel concluir a acao.";
 }
@@ -1084,6 +1089,42 @@ async function authenticateFirebase(createAccount = false) {
   }
 }
 
+async function authenticateWithGoogle() {
+  if (!firebaseEnabled()) {
+    if (els.loginError) {
+      els.loginError.textContent = "Firebase nao esta configurado neste ambiente.";
+      els.loginError.classList.add("visible");
+    }
+    return false;
+  }
+
+  try {
+    showLoading("Entrando com Google...");
+    if (els.loginError) els.loginError.classList.remove("visible");
+    const provider = new window.firebase.auth.GoogleAuthProvider();
+    provider.setCustomParameters({ prompt: "select_account" });
+    try {
+      const credential = await firebaseState.auth.signInWithPopup(provider);
+      await ensureFirebaseUserProfile(credential.user, currentAuthRole());
+    } catch (error) {
+      if (error?.code === "auth/popup-blocked" || error?.code === "auth/popup-closed-by-user" || error?.code === "auth/cancelled-popup-request") {
+        await firebaseState.auth.signInWithRedirect(provider);
+        return true;
+      }
+      throw error;
+    }
+    return true;
+  } catch (error) {
+    if (els.loginError) {
+      els.loginError.textContent = firebaseErrorMessage(error);
+      els.loginError.classList.add("visible");
+    }
+    return false;
+  } finally {
+    hideLoading();
+  }
+}
+
 async function ensureFirebaseUserProfile(user, fallbackRole) {
   const userRef = firebaseState.db.collection("users").doc(user.uid);
   const snapshot = await userRef.get();
@@ -1351,10 +1392,26 @@ function datesForVisibleMonth() {
   });
 }
 
+function addDays(date, amount) {
+  return new Date(date.getFullYear(), date.getMonth(), date.getDate() + amount);
+}
+
+function dutiesForDate(key) {
+  return state.duties.filter((duty) => duty.date === key);
+}
+
+function dutiesForMonthKey(key) {
+  return state.duties.filter((duty) => duty.date.startsWith(key));
+}
+
 function isBetweenFlightDays(key, monthDuties) {
   const before = [...monthDuties].reverse().find((duty) => duty.date < key && typeToClass(duty.type) === "flight");
   const after = monthDuties.find((duty) => duty.date > key && typeToClass(duty.type) === "flight");
   return Boolean(before && after && typeToClass(before.type) === "flight" && typeToClass(after.type) === "flight");
+}
+
+function isInactiveDate(key) {
+  return !dutiesForDate(key).length && isBetweenFlightDays(key, dutiesForMonthKey(key.slice(0, 7)));
 }
 
 function inactiveDatesForMonth() {
@@ -1373,6 +1430,72 @@ function bedIcon() {
       <path d="M21 18v2" />
       <path d="M3 14h18" />
     </svg>
+  `;
+}
+
+function upcomingSummary(dayDuties, inactive) {
+  if (inactive) return `${bedIcon()}<span>Inativo</span>`;
+  if (!dayDuties.length) return "<span>Sem dados</span>";
+
+  const flights = dayDuties.filter((duty) => typeToClass(duty.type) === "flight");
+  if (flights.length) {
+    const first = flights[0];
+    const route = [first.from, first.to].filter(Boolean).join(" → ");
+    const flight = first.flight ? `${escapeHtml(first.flight)} ` : "";
+    const timeRange = formatDutyTimeRange(first);
+    const time = timeRange ? ` · ${escapeHtml(timeRange)}` : "";
+    const extra = flights.length > 1 ? ` · +${flights.length - 1} voo(s)` : "";
+    return `<span>${flight}${escapeHtml(route || "Voo")}${time}${extra}</span>`;
+  }
+
+  const duty = dayDuties[0];
+  const dutyClass = typeToClass(duty.type);
+  const place = duty.from ? ` · ${escapeHtml(duty.from)}` : "";
+  const timeRange = formatDutyTimeRange(duty);
+  const time = timeRange ? ` · ${escapeHtml(timeRange)}` : "";
+  const icon = dutyClass === "off" ? bedIcon() : "";
+  return `${icon}<span>${escapeHtml(badgeLabel(duty))}${place}${time}</span>`;
+}
+
+function renderUpcomingDays() {
+  if (!els.upcomingDays) return;
+  if (!state.duties.length) {
+    els.upcomingDays.hidden = true;
+    els.upcomingDays.innerHTML = "";
+    return;
+  }
+
+  const today = new Date();
+  const items = Array.from({ length: 7 }, (_, index) => {
+    const date = addDays(today, index);
+    const key = dateKey(date);
+    const dayDuties = dutiesForDate(key);
+    const inactive = isInactiveDate(key);
+    const primary = dayDuties[0];
+    const badge = primary
+      ? `<span class="badge ${typeToClass(primary.type)}">${escapeHtml(badgeLabel(primary))}</span>`
+      : inactive
+        ? `<span class="badge flight">Voo</span>`
+        : "";
+    return `
+      <div class="upcoming-item ${key === todayKey() ? "today" : ""}">
+        <div class="upcoming-date">
+          <strong>${date.getDate()}</strong>
+          <span>${escapeHtml(formatWeekdayName(date))}</span>
+          ${badge}
+        </div>
+        <div class="upcoming-detail ${inactive ? "inactive" : ""}">${upcomingSummary(dayDuties, inactive)}</div>
+      </div>
+    `;
+  }).join("");
+
+  els.upcomingDays.hidden = false;
+  els.upcomingDays.innerHTML = `
+    <div class="upcoming-heading">
+      <h3>Próximos dias</h3>
+      <span>A partir de hoje</span>
+    </div>
+    <div class="upcoming-list">${items}</div>
   `;
 }
 
@@ -1419,6 +1542,7 @@ function render() {
   if (els.pilotName) els.pilotName.value = state.meta.pilotName || "";
   els.scheduleFooter.textContent = formatUpdatedAt();
   renderSummary();
+  renderUpcomingDays();
   renderCalendar();
   if (state.mode === "admin") renderFamilyAccessList();
 }
@@ -1802,6 +1926,7 @@ function bindEvents() {
       els.loginError.classList.add("visible");
     }
   });
+  els.googleLoginButton?.addEventListener("click", authenticateWithGoogle);
   els.logoutButton?.addEventListener("click", logoutPilot);
   els.familyLogoutButton?.addEventListener("click", logoutPilot);
   els.pilotName?.addEventListener("change", syncMetaFromInputs);

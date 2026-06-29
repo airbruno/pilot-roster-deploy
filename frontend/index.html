@@ -11,7 +11,7 @@
     <link rel="manifest" href="/manifest.webmanifest" />
     <link rel="icon" href="/icons/app-icon.svg" type="image/svg+xml" />
     <link rel="apple-touch-icon" href="/icons/app-icon.svg" />
-    <link rel="stylesheet" href="styles.css?v=37" />
+    <link rel="stylesheet" href="styles.css?v=38" />
   </head>
   <body>
     <section class="login-screen" id="pilotLogin" aria-label="Login do piloto" hidden>
@@ -36,6 +36,7 @@
         <div class="import-status error" id="loginError" role="alert"></div>
         <button type="submit">Entrar</button>
         <button class="secondary" id="createAccountButton" type="button">Criar conta</button>
+        <button class="google-login" id="googleLoginButton" type="button">Entrar com Google</button>
         <a class="login-family-link" href="/piloto/">Acessar portal do piloto</a>
       </form>
     </section>
@@ -130,6 +131,7 @@
             </div>
           </div>
 
+          <section class="upcoming-section" id="upcomingDays" aria-label="Próximos dias" hidden></section>
           <div class="calendar" id="calendar" aria-label="Calendario mensal"></div>
           <footer class="schedule-footer" id="scheduleFooter"></footer>
         </section>
@@ -148,6 +150,6 @@
     <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-functions-compat.js"></script>
-    <script src="app.js?v=37"></script>
+    <script src="app.js?v=38"></script>
   </body>
 </html>

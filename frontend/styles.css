@@ -249,6 +249,16 @@ h2 {
   color: var(--ink);
 }
 
+.google-login {
+  background: #ffffff;
+  border-color: rgba(255, 255, 255, 0.18);
+  color: #111827;
+}
+
+.google-login:hover {
+  background: #f8fafc;
+}
+
 body.pilot-locked .app-shell,
 body.pilot-locked .today-fab {
   display: none;
@@ -499,6 +509,93 @@ body.pilot-locked .today-fab {
   border: 0;
   border-radius: 0;
   background: transparent;
+}
+
+.upcoming-section {
+  border: 1px solid rgba(49, 66, 86, 0.92);
+  border-radius: 8px;
+  background: rgba(10, 17, 27, 0.72);
+  display: grid;
+  gap: 10px;
+  margin-top: 18px;
+  padding: 12px;
+}
+
+.upcoming-section[hidden] {
+  display: none;
+}
+
+.upcoming-heading {
+  align-items: baseline;
+  display: flex;
+  gap: 8px;
+  justify-content: space-between;
+}
+
+.upcoming-heading h3 {
+  color: var(--ink);
+  font-size: 0.92rem;
+  margin: 0;
+}
+
+.upcoming-heading span {
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 750;
+}
+
+.upcoming-list {
+  display: grid;
+  gap: 8px;
+}
+
+.upcoming-item {
+  background: rgba(16, 25, 39, 0.88);
+  border: 1px solid rgba(149, 164, 184, 0.14);
+  border-radius: 8px;
+  display: grid;
+  gap: 6px;
+  padding: 10px;
+}
+
+.upcoming-item.today {
+  border-color: rgba(91, 140, 255, 0.72);
+}
+
+.upcoming-date {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.upcoming-date strong {
+  color: var(--ink);
+  font-size: 0.98rem;
+}
+
+.upcoming-date span {
+  color: var(--muted);
+  font-size: 0.82rem;
+  font-weight: 800;
+}
+
+.upcoming-detail {
+  align-items: center;
+  color: var(--ink);
+  display: flex;
+  font-size: 0.86rem;
+  font-weight: 800;
+  gap: 8px;
+  min-width: 0;
+}
+
+.upcoming-detail span {
+  overflow-wrap: anywhere;
+}
+
+.upcoming-detail.inactive {
+  color: #a8c2ff;
 }
 
 .schedule-footer {
