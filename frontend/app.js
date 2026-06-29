@@ -122,6 +122,7 @@ const typeClass = {
   folga: "off",
   off: "off",
   ferias: "off",
+  "folga pedida": "off",
   licenca: "off",
   "dispensa medica": "off",
   afastamento: "off",
@@ -547,6 +548,18 @@ function inferType(line, hasRouteOrFlight, neoCode = "") {
   return hasRouteOrFlight ? "Voo" : "Programação";
 }
 
+function inferStoredDutyType(input) {
+  const rawType = input.type || input.tipo || "";
+  const candidates = [
+    input.notes || input.observacoes || input.obs || "",
+    input.flight || input.voo || "",
+    rawType,
+  ].filter(Boolean);
+  const neoCode = candidates.map(iflightNeoEventCode).find(Boolean);
+  if (neoCode && iflightNeoTags[neoCode]) return iflightNeoTags[neoCode];
+  return rawType || "Voo";
+}
+
 function extractScheduleYear(text) {
   const yearMatch = String(text).match(/\b(20\d{2})\b/);
   return yearMatch ? Number(yearMatch[1]) : state.visibleMonth.getFullYear();
@@ -690,6 +703,7 @@ function parseScheduleText(text) {
 function normalizeDuty(input) {
   const date = parseDate(input.date || input.data);
   if (!date) return null;
+  const type = inferStoredDutyType(input);
   return {
     id: input.id || crypto.randomUUID(),
     date,
@@ -697,7 +711,7 @@ function normalizeDuty(input) {
     start: input.start || input.inicio || "",
     end: input.end || input.fim || "",
     dutyEnd: input.dutyEnd || input.fimJornada || input.fim_jornada || input.debrief || "",
-    type: input.type || input.tipo || "Voo",
+    type,
     from: String(input.from || input.origem || "").trim().toUpperCase(),
     to: String(input.to || input.destino || "").trim().toUpperCase(),
     flight: String(input.flight || input.voo || "").trim(),
